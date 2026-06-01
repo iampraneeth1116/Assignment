@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maverick – Care Coordinator</title>
+  <meta name="description" content="Maverick: AI-powered personal assistant for care coordination." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --accent:    #58a6ff;
+      --accent2:   #3fb950;
+      --danger:    #f85149;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --bubble-user: #1f6feb;
+      --bubble-ai:   #21262d;
+      --radius:    12px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #fff;
+      letter-spacing: -1px;
+      box-shadow: 0 0 12px rgba(88,166,255,0.35);
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.4px; }
+    header span { font-size: 12px; color: var(--muted); margin-left: 2px; }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent2);
+      margin-left: auto;
+      box-shadow: 0 0 6px var(--accent2);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+    .sidebar-section h3 {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px;
+    }
+    .context-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+    .ctx-item {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    .ctx-key { color: var(--accent); font-weight: 500; margin-bottom: 2px; }
+    .ctx-val { color: var(--muted); line-height: 1.4; }
+
+    .agents-list { display: flex; flex-direction: column; gap: 6px; }
+    .agent-badge {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--muted);
+      padding: 6px 8px; border-radius: 8px;
+      cursor: default;
+      transition: background 0.15s;
+    }
+    .agent-badge:hover { background: #0d1117; }
+    .agent-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .agent-badge.active .dot { background: var(--accent2); box-shadow: 0 0 5px var(--accent2); }
+    .agent-badge.active { color: var(--text); }
+
+    /* ── Chat area ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+    #chat-messages::-webkit-scrollbar { width: 5px; }
+    #chat-messages::-webkit-scrollbar-track { background: transparent; }
+    #chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .message {
+      display: flex;
+      gap: 10px;
+      max-width: 780px;
+      animation: fadeUp 0.25s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .message.ai   { align-self: flex-start; }
+
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; flex-shrink: 0;
+    }
+    .message.user .avatar { background: var(--bubble-user); color: #fff; }
+    .message.ai   .avatar {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; font-size: 12px;
+    }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 680px;
+      white-space: pre-wrap;
+    }
+    .message.user .bubble {
+      background: var(--bubble-user);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.ai .bubble {
+      background: var(--bubble-ai);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .meta {
+      font-size: 10px; color: var(--muted);
+      margin-top: 4px;
+      display: flex; gap: 6px; align-items: center;
+    }
+    .message.user .meta { justify-content: flex-end; }
+    .agent-tag {
+      background: #1f262e;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 10px; color: var(--accent);
+    }
+
+    /* typing indicator */
+    .typing .bubble {
+      display: flex; gap: 5px; align-items: center; padding: 14px 18px;
+    }
+    .typing .dot-bounce {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+      animation: bounce 1.2s infinite;
+    }
+    .typing .dot-bounce:nth-child(2) { animation-delay: 0.2s; }
+    .typing .dot-bounce:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%,80%,100% { transform: translateY(0); }
+      40%          { transform: translateY(-6px); }
+    }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    #query-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      resize: none;
+      transition: border-color 0.2s;
+      min-height: 48px;
+      max-height: 140px;
+    }
+    #query-input:focus { border-color: var(--accent); }
+    #query-input::placeholder { color: var(--muted); }
+
+    #send-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 0 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    #send-btn:hover  { background: #79c0ff; }
+    #send-btn:active { transform: scale(0.96); }
+    #send-btn:disabled { background: var(--border); cursor: not-allowed; }
+
+    /* Suggestions */
+    .suggestions {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      padding: 0 24px 12px;
+    }
+    .suggestion-chip {
+      background: #161b22;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px; color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .suggestion-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Error toast */
+    .error-bubble { border-color: var(--danger) !important; color: #ffa198; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mv</div>
+  <div>
+    <h1>Maverick <span>/ Care Coordinator</span></h1>
+  </div>
+  <div class="status-dot" title="API connected"></div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside>
+    <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+      <h3>Patient Context</h3>
+      <div class="context-list" id="context-list">
+        <div class="ctx-item"><div class="ctx-key">loading…</div></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Agents</h3>
+      <div class="agents-list">
+        <div class="agent-badge" id="badge-council_agent">
+          <span class="dot"></span> Council (orchestrator)
+        </div>
+        <div class="agent-badge" id="badge-memory_agent">
+          <span class="dot"></span> Memory
+        </div>
+        <div class="agent-badge" id="badge-logistics_agent">
+          <span class="dot"></span> Logistics
+        </div>
+        <div class="agent-badge" id="badge-email_agent">
+          <span class="dot"></span> Email
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Chat -->
+  <main>
+    <div id="chat-messages">
+      <!-- Welcome message -->
+      <div class="message ai">
+        <div class="avatar">Mv</div>
+        <div>
+          <div class="bubble">👋 Hi, I'm Maverick — your care coordination assistant. How can I help you today?
+
+You can ask me to schedule appointments, look up patient information, arrange transport, or draft emails to Dr. Patel's office.</div>
+          <div class="meta">Maverick · just now</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggestions" id="suggestions">
+      <div class="suggestion-chip" onclick="useSuggestion(this)">What transport does Dad use?</div>
+      <div class="suggestion-chip" onclick="useSuggestion(this)">Schedule appointment with Dr. Patel next Wednesday</div>
+      <div class="suggestion-chip" onclick="useSuggestion(this)">Draft an email confirming the appointment</div>
+      <div class="suggestion-chip" onclick="useSuggestion(this)">What's Patrick's Wednesday schedule?</div>
+    </div>
+
+    <div class="input-bar">
+      <textarea id="query-input" rows="1" placeholder="Ask Maverick something…"></textarea>
+      <button id="send-btn" onclick="sendQuery()">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+        Send
+      </button>
+    </div>
+  </main>
+</div>
+
+<script>
+  const API = 'http://localhost:8000/api';
+
+  // ── Load context sidebar ──────────────────────────────────────────────────
+  async function loadContext() {
+    try {
+      const res = await fetch(`${API}/context`);
+      const data = await res.json();
+      const list = document.getElementById('context-list');
+      list.innerHTML = Object.entries(data).map(([k, v]) => `
+        <div class="ctx-item">
+          <div class="ctx-key">${k}</div>
+          <div class="ctx-val">${v}</div>
+        </div>
+      `).join('');
+    } catch {
+      document.getElementById('context-list').innerHTML =
+        '<div class="ctx-item"><div class="ctx-val" style="color:#f85149">API offline</div></div>';
+    }
+  }
+  loadContext();
+
+  // ── Agent badge highlights ────────────────────────────────────────────────
+  function highlightAgents(agentsUsed) {
+    document.querySelectorAll('.agent-badge').forEach(el => el.classList.remove('active'));
+    ['council_agent', ...agentsUsed].forEach(a => {
+      const el = document.getElementById(`badge-${a}`);
+      if (el) el.classList.add('active');
+    });
+  }
+  function clearAgents() {
+    document.querySelectorAll('.agent-badge').forEach(el => el.classList.remove('active'));
+  }
+
+  // ── Chat helpers ──────────────────────────────────────────────────────────
+  const messages = document.getElementById('chat-messages');
+
+  function appendMessage(role, text, meta = '') {
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+    const isUser = role === 'user';
+    div.innerHTML = `
+      <div class="avatar">${isUser ? 'P' : 'Mv'}</div>
+      <div>
+        <div class="bubble">${escHtml(text)}</div>
+        <div class="meta">${isUser ? 'Patrick' : 'Maverick'} · ${timeNow()}${meta ? ' · ' + meta : ''}</div>
+      </div>`;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'message ai typing';
+    div.id = 'typing-indicator';
+    div.innerHTML = `
+      <div class="avatar">Mv</div>
+      <div><div class="bubble">
+        <div class="dot-bounce"></div>
+        <div class="dot-bounce"></div>
+        <div class="dot-bounce"></div>
+      </div></div>`;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  function hideTyping() {
+    document.getElementById('typing-indicator')?.remove();
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function timeNow() {
+    return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  // ── Send query ────────────────────────────────────────────────────────────
+  async function sendQuery() {
+    const input = document.getElementById('query-input');
+    const btn   = document.getElementById('send-btn');
+    const query = input.value.trim();
+    if (!query) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    btn.disabled = true;
+    document.getElementById('suggestions').style.display = 'none';
+    clearAgents();
+
+    appendMessage('user', query);
+    showTyping();
+
+    try {
+      const res = await fetch(`${API}/query`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query}),
+      });
+      const data = await res.json();
+      hideTyping();
+
+      const agentTags = (data.agents_used || [])
+        .map(a => `<span class="agent-tag">${a}</span>`)
+        .join(' ');
+
+      const div = appendMessage('ai', data.response, '');
+      div.querySelector('.meta').innerHTML +=
+        ` <span style="display:flex;gap:4px;margin-left:4px;">${agentTags}</span>`;
+
+      highlightAgents(data.agents_used || []);
+      loadContext(); // refresh sidebar after potential writes
+
+    } catch (err) {
+      hideTyping();
+      const div = appendMessage('ai', `⚠️ Could not reach the Maverick API.\n\nMake sure the server is running:\nuvicorn app.main:app --reload`, '');
+      div.querySelector('.bubble').classList.add('error-bubble');
+    }
+
+    btn.disabled = false;
+    input.focus();
+  }
+
+  // ── Suggestion chips ──────────────────────────────────────────────────────
+  function useSuggestion(el) {
+    document.getElementById('query-input').value = el.textContent;
+    sendQuery();
+  }
+
+  // ── Auto-grow textarea + Enter to send ────────────────────────────────────
+  document.getElementById('query-input').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
+  document.getElementById('query-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
+  });
+</script>
+</body>
+</html>
