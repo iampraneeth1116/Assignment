@@ -7,4 +7,4 @@ data/maverick.db
 *.egg-info/
 .DS_Store
 notes.md
-
+runs/
