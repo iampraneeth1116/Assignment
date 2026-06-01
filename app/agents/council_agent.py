@@ -1,12 +1,14 @@
 """
 council_agent.py
 ----------------
-The orchestrator / "council" agent. It receives a high-level user request,
-decides which specialist agents to invoke (memory, logistics, email), collects
-their outputs, and synthesises a final unified response for Patrick.
+The deliberation council — a meta-agent that synthesises the outputs of all
+three specialist agents (email, memory, logistics) and produces a final,
+holistic recommendation for Patrick.
 
-Uses Groq (LLaMA 3) for both routing decisions and final synthesis.
-Email agent uses mock data — no API call is made for email drafting.
+Uses Groq (LLaMA 3.3-70B) as the reasoning engine.
+
+Input  : full state dict (email_analysis + memory_context + logistics_analysis)
+Output : state["council_recommendation"] (CouncilRecommendation Pydantic model)
 """
 
 from __future__ import annotations
@@ -16,10 +18,9 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
-from app.memory.memory_store import MemoryStore
 from app.audit.audit_log import AuditLog
-from app.agents import memory_agent, logistics_agent, email_agent
 
 load_dotenv()
 
@@ -27,124 +28,134 @@ _client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 _MODEL = "llama-3.3-70b-versatile"
 _AGENT_NAME = "council_agent"
 
-_SYSTEM_PROMPT = """
-You are the council agent — the top-level orchestrator for Maverick, a personal
-assistant for Patrick who manages care coordination for his elderly father.
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
+_SYSTEM_PROMPT = (
+    "You are a multi-perspective council agent that deliberates on caregiving "
+    "decisions. Consider all inputs holistically. Reason through tradeoffs "
+    "carefully. Respond ONLY with valid JSON."
+)
 
-Your role:
-1. Understand Patrick's high-level request.
-2. Decide which sub-agents are needed (memory, logistics, email — or a combination).
-3. Receive their outputs and compose a clear, helpful, final response for Patrick.
-
-Sub-agents available:
-- memory_agent    – reads/writes patient context (preferences, doctor, condition, schedule)
-- logistics_agent – handles appointment scheduling and transport coordination
-- email_agent     – drafts professional emails (uses pre-built templates, no API call)
-
-Always be warm, organised, and proactive. If you spot scheduling conflicts or
-missing information, flag them clearly.
-""".strip()
 
 # ---------------------------------------------------------------------------
-# Routing: simple keyword heuristics
+# Pydantic output model
 # ---------------------------------------------------------------------------
-
-def _needs_memory(query: str) -> bool:
-    keywords = ["remember", "context", "know", "what is", "who is",
-                "preference", "transport", "condition", "doctor", "family",
-                "schedule", "wednesday", "appointment"]
-    q = query.lower()
-    return any(k in q for k in keywords)
-
-
-def _needs_logistics(query: str) -> bool:
-    keywords = ["schedul", "book", "appointment", "arrange", "transport",
-                "pick up", "pickup", "next", "date", "time", "when"]
-    q = query.lower()
-    return any(k in q for k in keywords)
+class CouncilRecommendation(BaseModel):
+    recommendation: str              # the single clearest recommended action
+    reasoning: list[str]             # list of reasoning steps that led to it
+    tradeoffs: list[str]             # tradeoffs to be aware of
+    priority_actions: list[str]      # ordered list of the highest-priority next steps
+    risk_level: str                  # "low" | "medium" | "high"
+    confidence_score: float          # 0.0 (uncertain) to 1.0 (very confident)
 
 
-def _needs_email(query: str) -> bool:
-    keywords = ["email", "write", "draft", "send", "message", "notify",
-                "contact", "confirm"]
-    q = query.lower()
-    return any(k in q for k in keywords)
+# ---------------------------------------------------------------------------
+# JSON schema shown to the LLM
+# ---------------------------------------------------------------------------
+_SCHEMA = {
+    "recommendation": "str — the single clearest recommended course of action",
+    "reasoning": "list[str] — step-by-step reasoning that led to the recommendation",
+    "tradeoffs": "list[str] — tradeoffs or downsides to be aware of",
+    "priority_actions": "list[str] — ordered list of highest-priority next steps for Patrick",
+    "risk_level": "str — one of: low | medium | high",
+    "confidence_score": "float — between 0.0 (very uncertain) and 1.0 (highly confident)",
+}
 
 
-def run(query: str) -> dict:
+# ---------------------------------------------------------------------------
+# Agent entry point
+# ---------------------------------------------------------------------------
+def run(state: dict) -> dict:
     """
-    Entry point for the council agent.
+    Deliberate over all agent outputs and produce a final recommendation.
 
     Parameters
     ----------
-    query: Patrick's natural-language request.
+    state : dict
+        Must contain:
+        - ``state["email_analysis"]``    — from email_agent
+        - ``state["memory_context"]``    — from memory_agent
+        - ``state["logistics_analysis"]``— from logistics_agent
 
     Returns
     -------
-    A dict with:
-      - ``response``    (str)        – final synthesised answer
-      - ``agents_used`` (list[str])  – which sub-agents were invoked
-      - ``details``     (dict)       – raw outputs from each sub-agent
+    dict
+        The same state dict extended with ``state["council_recommendation"]``
+        set to the serialised :class:`CouncilRecommendation` (via ``model_dump()``).
     """
-    store = MemoryStore()
     audit = AuditLog()
-    context = store.get_all_context()
+    email_analysis: dict = state.get("email_analysis", {})
+    memory_context: dict = state.get("memory_context", {})
+    logistics_analysis: dict = state.get("logistics_analysis", {})
 
-    agents_used: list[str] = []
-    details: dict[str, object] = {}
+    # ---- pre-execution audit log ------------------------------------------
+    audit.log(
+        agent_name=_AGENT_NAME,
+        input_summary=(
+            f"Deliberating: event={email_analysis.get('event_type', 'unknown')}, "
+            f"risk={logistics_analysis.get('estimated_coordination_effort', 'unknown')}"
+        ),
+        output_summary="starting",
+        status="running",
+    )
 
-    # ── Route to sub-agents ──────────────────────────────────────────────────
-    if _needs_memory(query):
-        agents_used.append("memory_agent")
-        details["memory"] = memory_agent.run(query, context)
-
-    if _needs_logistics(query):
-        agents_used.append("logistics_agent")
-        result = logistics_agent.run(query, context)
-        details["logistics"] = result
-        context = store.get_all_context()  # refresh after potential writes
-
-    if _needs_email(query):
-        agents_used.append("email_agent")
-        # email_agent is fully mock — no Groq call made here
-        details["email"] = email_agent.run(query, context)
-
-    # Default fallback
-    if not agents_used:
-        agents_used.append("memory_agent")
-        details["memory"] = memory_agent.run(query, context)
-
-    # ── Synthesise final response via Groq ───────────────────────────────────
-    sub_outputs = json.dumps(details, indent=2, default=str)
-    synthesis_prompt = (
-        f"Patrick asked: {query}\n\n"
-        f"Sub-agent outputs:\n{sub_outputs}\n\n"
-        "Please compose a single, friendly, well-structured response for Patrick "
-        "that combines the above information. Do not repeat raw JSON."
+    user_prompt = (
+        f"You are the council agent. Deliberate over all specialist agent outputs "
+        f"and produce a final, holistic recommendation.\n\n"
+        f"Email Analysis:\n{json.dumps(email_analysis, indent=2)}\n\n"
+        f"Memory Context:\n{json.dumps(memory_context, indent=2)}\n\n"
+        f"Logistics Analysis:\n{json.dumps(logistics_analysis, indent=2)}\n\n"
+        f"Return a CouncilRecommendation JSON object using this schema:\n"
+        f"{json.dumps(_SCHEMA, indent=2)}"
     )
 
     try:
         response = _client.chat.completions.create(
             model=_MODEL,
-            max_tokens=768,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": synthesis_prompt},
+                {"role": "user", "content": user_prompt},
             ],
+            temperature=0.2,
         )
-        final_answer = response.choices[0].message.content.strip()
+
+        raw_content = response.choices[0].message.content.strip()
+
+        # Strip accidental markdown fences
+        if raw_content.startswith("```"):
+            raw_content = raw_content.split("```")[1]
+            if raw_content.startswith("json"):
+                raw_content = raw_content[4:]
+            raw_content = raw_content.strip()
+
+        parsed = json.loads(raw_content)
+        result = CouncilRecommendation(**parsed)
+
+        # ---- post-execution audit log -------------------------------------
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=(
+                f"event={email_analysis.get('event_type')}, "
+                f"conflict={logistics_analysis.get('conflict_detected')}"
+            ),
+            output_summary=(
+                f"risk={result.risk_level}, "
+                f"confidence={result.confidence_score:.2f}, "
+                f"actions={len(result.priority_actions)}"
+            ),
+            status="success",
+        )
+
+        state["council_recommendation"] = result.model_dump()
+
     except Exception as exc:  # noqa: BLE001
-        final_answer = f"Council synthesis error: {exc}"
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=f"event={email_analysis.get('event_type')}",
+            output_summary=f"ERROR: {exc}",
+            status="error",
+        )
+        raise
 
-    audit.log(
-        _AGENT_NAME,
-        query,
-        final_answer[:300],
-        status="success" if "error" not in final_answer.lower() else "error",
-    )
-
-    return {
-        "response": final_answer,
-        "agents_used": agents_used,
-        "details": details,
-    }
+    return state

@@ -1,9 +1,9 @@
 """
 memory_agent.py
 ---------------
-Agent responsible for reading from and writing to the patient context store.
-Uses Groq (LLaMA 3) to interpret free-text requests and map them to
-MemoryStore operations, then audits every call via AuditLog.
+Retrieves all stored context from MemoryStore and synthesises a structured
+MemoryContext via Groq (LLaMA 3.3-70B), taking the current email event into
+account.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 from app.memory.memory_store import MemoryStore
 from app.audit.audit_log import AuditLog
@@ -23,65 +24,125 @@ _client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 _MODEL = "llama-3.3-70b-versatile"
 _AGENT_NAME = "memory_agent"
 
-_SYSTEM_PROMPT = """
-You are a memory agent for a personal assistant called Maverick.
-Your job is to help retrieve and update information about the patient (Patrick)
-and his family from a structured context store.
-
-When asked to look up information, respond with the relevant facts in a concise,
-conversational way. When asked to update information, confirm what was saved.
-
-You have access to the following context keys:
-- preferred_transport
-- father_doctor
-- father_condition
-- last_appointment
-- family_members
-- wednesday_schedule
-
-Always be factual and only use information explicitly provided to you.
-""".strip()
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
+_SYSTEM_PROMPT = (
+    "You are a memory retrieval agent. Given stored patient context and an "
+    "email event, synthesize the most relevant memory context. "
+    "Respond ONLY with valid JSON."
+)
 
 
-def run(query: str, context: dict[str, str] | None = None) -> str:
+# ---------------------------------------------------------------------------
+# Pydantic output model
+# ---------------------------------------------------------------------------
+class MemoryContext(BaseModel):
+    doctor_known: bool               # is the doctor already recorded in context?
+    preferred_transport: str         # stored transport preference
+    last_appointment: str            # date of the last recorded appointment
+    family_members: list[str]        # names of known family members
+    wednesday_availability: str      # Patrick's Wednesday schedule
+    relevant_notes: str              # any other notes relevant to the email event
+
+
+# ---------------------------------------------------------------------------
+# JSON schema shown to the LLM
+# ---------------------------------------------------------------------------
+_SCHEMA = {
+    "doctor_known": "bool — true if the doctor in the email matches stored context",
+    "preferred_transport": "str — stored preferred transport method",
+    "last_appointment": "str — date of the last recorded appointment",
+    "family_members": "list[str] — list of known family member names",
+    "wednesday_availability": "str — description of Patrick's Wednesday schedule",
+    "relevant_notes": "str — any other stored notes relevant to this email event",
+}
+
+
+# ---------------------------------------------------------------------------
+# Agent entry point
+# ---------------------------------------------------------------------------
+def run(state: dict) -> dict:
     """
-    Process a natural-language memory query.
+    Retrieve all stored context and synthesise a MemoryContext from it.
 
     Parameters
     ----------
-    query:   The user's question or instruction.
-    context: Optional extra context to inject alongside the stored facts.
+    state : dict
+        Must contain ``state["email_analysis"]`` — the output of email_agent.
 
     Returns
     -------
-    A plain-text response from the model.
+    dict
+        The same state dict extended with ``state["memory_context"]`` set to
+        the serialised :class:`MemoryContext` (via ``model_dump()``).
     """
-    store = MemoryStore()
     audit = AuditLog()
+    store = MemoryStore()
+    email_analysis: dict = state.get("email_analysis", {})
 
-    all_ctx = store.get_all_context()
-    if context:
-        all_ctx.update(context)
+    # ---- pre-execution audit log ------------------------------------------
+    audit.log(
+        agent_name=_AGENT_NAME,
+        input_summary=f"Retrieving context for event: {email_analysis.get('event_type', 'unknown')}",
+        output_summary="starting",
+        status="running",
+    )
 
-    context_block = json.dumps(all_ctx, indent=2)
-    user_message = (
-        f"Current patient context:\n{context_block}\n\n"
-        f"User request: {query}"
+    # Pull everything from SQLite
+    raw_context: dict[str, str] = store.get_all_context()
+
+    user_prompt = (
+        f"Here is all the stored patient context (key-value pairs):\n"
+        f"{json.dumps(raw_context, indent=2)}\n\n"
+        f"Here is the current email event:\n"
+        f"{json.dumps(email_analysis, indent=2)}\n\n"
+        f"Synthesize a MemoryContext JSON object using this schema:\n"
+        f"{json.dumps(_SCHEMA, indent=2)}"
     )
 
     try:
         response = _client.chat.completions.create(
             model=_MODEL,
-            max_tokens=512,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": user_message},
+                {"role": "user", "content": user_prompt},
             ],
+            temperature=0.1,
         )
-        answer = response.choices[0].message.content.strip()
-        audit.log(_AGENT_NAME, query, answer, status="success")
-        return answer
+
+        raw_content = response.choices[0].message.content.strip()
+
+        # Strip accidental markdown fences
+        if raw_content.startswith("```"):
+            raw_content = raw_content.split("```")[1]
+            if raw_content.startswith("json"):
+                raw_content = raw_content[4:]
+            raw_content = raw_content.strip()
+
+        parsed = json.loads(raw_content)
+        result = MemoryContext(**parsed)
+
+        # ---- post-execution audit log -------------------------------------
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=f"Context keys: {list(raw_context.keys())}",
+            output_summary=(
+                f"doctor_known={result.doctor_known}, "
+                f"transport={result.preferred_transport}"
+            ),
+            status="success",
+        )
+
+        state["memory_context"] = result.model_dump()
+
     except Exception as exc:  # noqa: BLE001
-        err = f"MemoryAgent error: {exc}"
-        audit.log(_AGENT_NAME, query, err, status="error")
-        return err
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=f"Context keys: {list(raw_context.keys())}",
+            output_summary=f"ERROR: {exc}",
+            status="error",
+        )
+        raise
+
+    return state

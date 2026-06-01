@@ -1,149 +1,142 @@
 """
 email_agent.py
 --------------
-Agent responsible for drafting emails on Patrick's behalf.
+Parses a raw caregiving email and extracts structured information from it.
 
-NOTE: This agent uses MOCK DATA — no live API call is made.
-Pre-defined email templates are matched by keyword and filled in
-with values from the patient context store.
+Uses Groq (LLaMA 3.3-70B) to analyse the email and returns a validated
+EmailAnalysis Pydantic model serialised into the shared state dict.
 """
 
 from __future__ import annotations
 
-from app.memory.memory_store import MemoryStore
+import json
+import os
+
+from groq import Groq
+from dotenv import load_dotenv
+from pydantic import BaseModel
+
 from app.audit.audit_log import AuditLog
 
+load_dotenv()
+
+_client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
+_MODEL = "llama-3.3-70b-versatile"
 _AGENT_NAME = "email_agent"
 
 # ---------------------------------------------------------------------------
-# Mock email templates
-# Keys are match keywords (checked against the lowercase purpose string).
-# Templates support {placeholders} filled from patient context.
+# System prompt
 # ---------------------------------------------------------------------------
-_TEMPLATES: list[dict] = [
-    # More-specific intents first — checked before the generic confirm/schedule template
-    {
-        "keywords": ["reschedule", "change", "postpone", "move"],
-        "subject": "Request to Reschedule Appointment – {father_doctor}",
-        "body": (
-            "Dear {father_doctor}'s Office,\n\n"
-            "I am writing to request a reschedule for my father's upcoming appointment "
-            "(currently on {last_appointment}).\n\n"
-            "We are available most afternoons and can work around your availability. "
-            "Please reply with two or three alternative slots at your earliest convenience.\n\n"
-            "Thank you for your understanding.\n\n"
-            "Best regards,\nPatrick\n(on behalf of my father)"
-        ),
-    },
-    {
-        "keywords": ["cancel"],
-        "subject": "Appointment Cancellation – {father_doctor}",
-        "body": (
-            "Dear {father_doctor}'s Office,\n\n"
-            "Unfortunately I need to cancel my father's appointment scheduled for {last_appointment}.\n\n"
-            "I will contact your office shortly to arrange a new date. "
-            "Apologies for any inconvenience caused.\n\n"
-            "Best regards,\nPatrick\n(on behalf of my father)"
-        ),
-    },
-    {
-        "keywords": ["transport", "pickup", "pick up", "ride"],
-        "subject": "Transport Booking Request – {last_appointment}",
-        "body": (
-            "Dear {preferred_transport},\n\n"
-            "I would like to arrange a pickup for my father for a medical appointment "
-            "on {last_appointment}.\n\n"
-            "Please confirm availability and the estimated time of arrival. "
-            "He requires assistance boarding the vehicle.\n\n"
-            "Thank you,\nPatrick"
-        ),
-    },
-    {
-        "keywords": ["update", "condition", "progress", "report"],
-        "subject": "Update on Father's Condition – {father_condition}",
-        "body": (
-            "Dear {father_doctor},\n\n"
-            "I wanted to share a brief update on my father's condition since his last visit "
-            "on {last_appointment}.\n\n"
-            "He has been managing his {father_condition} and we have some new observations "
-            "we would like to discuss at the next appointment. Please let us know if an earlier "
-            "consultation is possible.\n\n"
-            "Thank you for your time and care.\n\n"
-            "Best regards,\nPatrick\n(on behalf of my father)"
-        ),
-    },
-    # Generic appointment confirmation — checked last
-    {
-        "keywords": ["confirm", "appointment", "schedule"],
-        "subject": "Appointment Confirmation – {father_doctor}",
-        "body": (
-            "Dear {father_doctor}'s Office,\n\n"
-            "I am writing to confirm the upcoming appointment for my father on {last_appointment}.\n\n"
-            "He will be arriving via {preferred_transport}. Please let us know if there is anything "
-            "you need us to bring or prepare in advance.\n\n"
-            "Thank you for your continued care.\n\n"
-            "Best regards,\nPatrick\n(on behalf of my father)"
-        ),
-    },
-]
+_SYSTEM_PROMPT = (
+    "You are an email parsing agent. Extract structured information from "
+    "caregiving emails. Respond ONLY with valid JSON matching the schema "
+    "provided. No markdown, no explanation."
+)
 
-_DEFAULT_TEMPLATE = {
-    "subject": "General Inquiry – {father_doctor}",
-    "body": (
-        "Dear {father_doctor}'s Office,\n\n"
-        "I am reaching out regarding my father's ongoing care ({father_condition}).\n\n"
-        "Could you please get in touch at your earliest convenience to discuss the next steps?\n\n"
-        "Thank you,\nPatrick"
-    ),
+
+# ---------------------------------------------------------------------------
+# Pydantic output model
+# ---------------------------------------------------------------------------
+class EmailAnalysis(BaseModel):
+    event_type: str                  # e.g. "appointment_reschedule"
+    person: str                      # patient / person the email is about
+    doctor: str                      # doctor's name
+    old_time: str                    # original appointment time
+    new_time: str                    # proposed new appointment time
+    transportation_required: bool    # does transport need rebooking?
+    urgency: str                     # "low" | "medium" | "high"
+    summary: str                     # one-sentence plain-English summary
+
+
+# ---------------------------------------------------------------------------
+# JSON schema shown to the LLM so it knows exactly what to return
+# ---------------------------------------------------------------------------
+_SCHEMA = {
+    "event_type": "str — type of event (e.g. appointment_reschedule, cancellation)",
+    "person": "str — name of the patient / person the email concerns",
+    "doctor": "str — name of the doctor / specialist",
+    "old_time": "str — original appointment date/time",
+    "new_time": "str — new proposed appointment date/time",
+    "transportation_required": "bool — true if transport needs to be rearranged",
+    "urgency": "str — one of: low | medium | high",
+    "summary": "str — one-sentence plain-English summary of the email",
 }
 
 
-def _match_template(purpose: str) -> dict:
-    """Return the best-matching template for *purpose*, or the default."""
-    p = purpose.lower()
-    for tmpl in _TEMPLATES:
-        if any(kw in p for kw in tmpl["keywords"]):
-            return tmpl
-    return _DEFAULT_TEMPLATE
-
-
-def _fill(template: str, ctx: dict[str, str]) -> str:
-    """Fill {placeholders} in *template* using *ctx*, leaving unknowns intact."""
-    try:
-        return template.format_map(ctx)
-    except KeyError:
-        return template
-
-
-def draft_email(purpose: str, context: dict[str, str] | None = None) -> str:
+# ---------------------------------------------------------------------------
+# Agent entry point
+# ---------------------------------------------------------------------------
+def run(state: dict) -> dict:
     """
-    Return a mock-drafted email for *purpose*.
+    Parse the raw email stored in state and return structured EmailAnalysis.
 
     Parameters
     ----------
-    purpose: Natural-language description of what the email should say.
-    context: Optional extra context merged with the stored patient context.
+    state : dict
+        Must contain ``state["raw_email"]`` — the raw text of the email.
 
     Returns
     -------
-    A plain-text email string: "Subject: ...\n\n<body>"
+    dict
+        The same state dict extended with ``state["email_analysis"]`` set to
+        the serialised :class:`EmailAnalysis` (via ``model_dump()``).
     """
-    store = MemoryStore()
     audit = AuditLog()
+    raw_email: str = state.get("raw_email", "")
 
-    ctx = store.get_all_context()
-    if context:
-        ctx.update(context)
+    # ---- pre-execution audit log ------------------------------------------
+    audit.log(
+        agent_name=_AGENT_NAME,
+        input_summary=f"Parsing email ({len(raw_email)} chars)",
+        output_summary="starting",
+        status="running",
+    )
 
-    tmpl = _match_template(purpose)
-    subject = _fill(tmpl["subject"], ctx)
-    body = _fill(tmpl["body"], ctx)
-    draft = f"Subject: {subject}\n\n{body}"
+    user_prompt = (
+        f"Parse the following caregiving email and return JSON matching the schema.\n\n"
+        f"Schema:\n{json.dumps(_SCHEMA, indent=2)}\n\n"
+        f"Email:\n{raw_email}"
+    )
 
-    audit.log(_AGENT_NAME, purpose, f"Subject: {subject}", status="success")
-    return draft
+    try:
+        response = _client.chat.completions.create(
+            model=_MODEL,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+        )
 
+        raw_content = response.choices[0].message.content.strip()
 
-def run(purpose: str, context: dict[str, str] | None = None) -> str:
-    """Alias so the workflow can call every agent uniformly via ``run()``."""
-    return draft_email(purpose, context)
+        # Strip accidental markdown fences if the model adds them
+        if raw_content.startswith("```"):
+            raw_content = raw_content.split("```")[1]
+            if raw_content.startswith("json"):
+                raw_content = raw_content[4:]
+            raw_content = raw_content.strip()
+
+        parsed = json.loads(raw_content)
+        result = EmailAnalysis(**parsed)
+
+        # ---- post-execution audit log -------------------------------------
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=f"Email: {raw_email[:120]}...",
+            output_summary=f"event_type={result.event_type}, urgency={result.urgency}",
+            status="success",
+        )
+
+        state["email_analysis"] = result.model_dump()
+
+    except Exception as exc:  # noqa: BLE001
+        audit.log(
+            agent_name=_AGENT_NAME,
+            input_summary=f"Email: {raw_email[:120]}...",
+            output_summary=f"ERROR: {exc}",
+            status="error",
+        )
+        raise
+
+    return state
