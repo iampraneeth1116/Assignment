@@ -1,1065 +1,403 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Maverick AI — Caregiver OS</title>
-  <meta name="description" content="Maverick AI: AI-powered multi-agent care coordination system for caregivers." />
+  <meta name="description" content="Maverick AI: AI-powered multi-agent care coordination for caregivers." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Design Tokens ──────────────────────────────────────────────────── */
     :root {
-      --bg: #0b0e14;
-      --surface: #111520;
-      --surface-2: #161c2a;
-      --surface-3: #1c2336;
-      --border: #232c3f;
-      --border-2: #2d3a52;
+      --bg:      #0d1117;
+      --bg2:     #010409;
+      --panel:   #161b22;
+      --panel2:  #1c2128;
+      --panel3:  #22272e;
+      --border:  #30363d;
+      --border2: #3d444d;
 
-      --accent: #4f8ef7;
-      --accent-glow: rgba(79, 142, 247, 0.18);
-      --accent-dim: #2a4f9e;
-      --green: #3dd68c;
-      --green-glow: rgba(61, 214, 140, 0.15);
-      --yellow: #f5c542;
-      --danger: #f05454;
-      --danger-glow: rgba(240, 84, 84, 0.15);
-      --purple: #a78bfa;
+      --blue:    #4f8ef7;
+      --blue-s:  rgba(79,142,247,.15);
+      --blue-d:  #1c3461;
+      --green:   #3dd399;
+      --green-s: rgba(61,211,153,.13);
+      --yellow:  #f0b429;
+      --yel-s:   rgba(240,180,41,.12);
+      --red:     #f87171;
+      --red-s:   rgba(248,113,113,.13);
+      --purple:  #c084fc;
 
-      --text: #e2e8f4;
-      --text-2: #9aabca;
-      --text-3: #5f7192;
+      --tx:  #e6edf3;
+      --tx2: #8b949e;
+      --tx3: #484f58;
 
-      --radius-sm: 6px;
-      --radius: 10px;
-      --radius-lg: 14px;
-
+      --r: 6px; --r2: 10px; --r3: 14px;
       --font: 'Inter', system-ui, sans-serif;
-      --mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-      --sidebar-w: 260px;
-      --header-h: 58px;
+      --mono: 'JetBrains Mono', monospace;
     }
 
-    html,
+    html, body { height: 100%; overflow: hidden; }
     body {
-      height: 100%;
-      overflow: hidden;
+      font-family: var(--font); background: var(--bg); color: var(--tx);
+      display: flex; flex-direction: column; height: 100vh; font-size: 14px;
     }
 
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
-    /* ── Scrollbars ──────────────────────────────────────────────────────── */
-    ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
+    /* ── Toasts ── */
+    #toasts {
+      position: fixed; top: 64px; right: 16px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999; pointer-events: none;
     }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--border-2);
-      border-radius: 4px;
-    }
-
-    /* ── Toast ────────────────────────────────────────────────────────────── */
-    #toast-container {
-      position: fixed;
-      top: 70px;
-      right: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 9999;
-      pointer-events: none;
-    }
-
     .toast {
-      background: var(--surface-3);
-      border: 1px solid var(--danger);
-      color: var(--danger);
-      padding: 10px 16px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-      animation: toastIn 0.25s ease, toastOut 0.3s ease 3.7s forwards;
-      pointer-events: auto;
+      background: var(--panel2); padding: 10px 16px; border-radius: var(--r2);
+      font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+      border-left: 3px solid var(--red); color: var(--tx);
+      pointer-events: auto; max-width: 340px;
+      animation: tIn .2s ease, tOut .3s ease 3.7s forwards;
     }
+    .toast.info { border-color: var(--blue); }
+    .toast.ok   { border-color: var(--green); }
+    .toast.warn { border-color: var(--yellow); }
+    @keyframes tIn  { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:none} }
+    @keyframes tOut { to{opacity:0;transform:translateX(10px)} }
 
-    .toast.info {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    @keyframes toastIn {
-      from {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes toastOut {
-      from {
-        opacity: 1;
-      }
-
-      to {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-    }
-
-    /* ── Header ───────────────────────────────────────────────────────────── */
+    /* ── Header ── */
     header {
-      height: var(--header-h);
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 0 20px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      position: relative;
-      z-index: 10;
+      height: 54px; background: var(--panel); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; padding: 0 18px; flex-shrink: 0; z-index: 40;
     }
-
-    .logo-mark {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 17px;
-      font-weight: 700;
-      color: #fff;
-      box-shadow: 0 0 16px rgba(79, 142, 247, 0.4);
-      flex-shrink: 0;
+    .logo {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: linear-gradient(135deg,#4f8ef7,#c084fc);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; box-shadow: 0 0 18px rgba(79,142,247,.3); flex-shrink: 0;
     }
-
-    header h1 {
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: -0.3px;
-      color: var(--text);
+    header h1 { font-size: 15px; font-weight: 600; }
+    header h1 span { color: var(--tx3); font-weight: 400; }
+    .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .api-badge {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 5px 12px; font-size: 12px; color: var(--tx2);
     }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 2.5s infinite; }
+    .dot.off { background: var(--red); box-shadow: none; animation: none; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-    header h1 span {
-      color: var(--text-3);
-      font-weight: 400;
-    }
+    /* ── App shell: sidebar + content area ── */
+    .shell { display: flex; flex: 1; overflow: hidden; }
 
-    .header-right {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .api-status {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 12px;
-      color: var(--text-3);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-      animation: blink 2.5s infinite;
-    }
-
-    .status-dot.offline {
-      background: var(--danger);
-      box-shadow: 0 0 8px var(--danger);
-      animation: none;
-    }
-
-    @keyframes blink {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: 0.35;
-      }
-    }
-
-    /* ── Layout ───────────────────────────────────────────────────────────── */
-    .layout {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    /* ── Sidebar ──────────────────────────────────────────────────────────── */
+    /* ── Sidebar ── */
     aside {
-      width: var(--sidebar-w);
-      background: var(--surface);
+      width: 220px; flex-shrink: 0; background: var(--panel);
       border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      flex-shrink: 0;
+      display: flex; flex-direction: column; overflow: hidden;
     }
 
-    .sidebar-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 12px;
-      border-bottom: 1px solid var(--border);
+    /* Sidebar nav tabs */
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    .sb-tab {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--r2);
+      font-size: 13px; font-weight: 500; color: var(--tx3);
+      cursor: pointer; border: none; background: none;
+      text-align: left; width: 100%; transition: background .15s, color .15s;
+      position: relative;
     }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-3);
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      border: none;
-      background: none;
-      text-align: left;
-      width: 100%;
+    .sb-tab:hover { background: var(--panel2); color: var(--tx2); }
+    .sb-tab.active { background: var(--blue-s); color: var(--blue); }
+    .sb-tab-icon { font-size: 16px; width: 20px; text-align: center; }
+    .sb-tab-badge {
+      margin-left: auto; min-width: 18px; height: 18px; border-radius: 9px;
+      background: var(--green); color: #021a0e; font-size: 10px; font-weight: 700;
+      display: none; align-items: center; justify-content: center; padding: 0 5px;
     }
+    .sb-tab-badge.vis { display: flex; }
 
-    .nav-item:hover {
-      background: var(--surface-3);
-      color: var(--text-2);
-    }
-
-    .nav-item.active {
-      background: var(--accent-glow);
-      color: var(--accent);
-    }
-
-    .nav-item .icon {
-      width: 16px;
-      text-align: center;
-      font-size: 14px;
-    }
-
-    .sidebar-section {
-      padding: 14px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .sidebar-section h3 {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-3);
-      margin-bottom: 10px;
-    }
-
-    /* Stage status in sidebar */
-    .stage-list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
+    /* Pipeline stages in sidebar */
+    .sb-stages { padding: 14px 10px; border-bottom: 1px solid var(--border); }
+    .sb-stages-lbl { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--tx3); padding: 0 6px; margin-bottom: 8px; }
     .stage-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 7px 8px;
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      color: var(--text-3);
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 8px; border-radius: var(--r2); transition: all .15s;
     }
-
-    .stage-icon {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      flex-shrink: 0;
-      background: var(--surface-3);
-      border: 1px solid var(--border-2);
-      transition: all 0.3s;
+    .stage-num {
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+      background: var(--panel3); border: 2px solid var(--border2); color: var(--tx3);
+      transition: all .3s;
     }
+    .stage-info { flex: 1; }
+    .stage-name { font-size: 12px; font-weight: 500; color: var(--tx2); }
+    .stage-st   { font-size: 10px; color: var(--tx3); margin-top: 1px; }
 
-    .stage-item.pending .stage-icon {
-      color: var(--text-3);
+    .stage-item.running .stage-num  { background: var(--blue-s); border-color: var(--blue); color: var(--blue); animation: sPing 1.5s infinite; }
+    .stage-item.running .stage-name { color: var(--tx); }
+    .stage-item.running .stage-st   { color: var(--blue); }
+    .stage-item.complete .stage-num { background: var(--green-s); border-color: var(--green); color: var(--green); }
+    .stage-item.complete .stage-name{ color: var(--tx2); }
+    .stage-item.complete .stage-st  { color: var(--green); }
+    .stage-item.failed .stage-num   { background: var(--red-s); border-color: var(--red); color: var(--red); }
+    .stage-item.failed .stage-st    { color: var(--red); }
+    @keyframes sPing { 0%,100%{box-shadow:0 0 0 0 var(--blue-s)} 50%{box-shadow:0 0 0 6px var(--blue-s)} }
+
+    .sb-footer { margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--border); }
+    .sb-footer-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--tx3); margin-bottom: 5px; }
+    #last-run { font-size: 12px; color: var(--tx3); }
+
+    /* ── Tab content area ── */
+    .tab-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .tab-pane { display: none; flex: 1; overflow-y: auto; padding: 20px; flex-direction: column; gap: 16px; }
+    .tab-pane.active { display: flex; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--r3); overflow: hidden; flex-shrink: 0;
     }
-
-    .stage-item.running .stage-icon {
-      background: var(--accent-glow);
-      border-color: var(--accent);
-      color: var(--accent);
-      animation: spinPulse 1.5s infinite;
+    .card-hd {
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 17px; border-bottom: 1px solid var(--border);
     }
-
-    .stage-item.complete .stage-icon {
-      background: var(--green-glow);
-      border-color: var(--green);
-      color: var(--green);
+    .card-icon  { font-size: 17px; }
+    .card-title { font-size: 14px; font-weight: 600; flex: 1; }
+    .badge {
+      padding: 3px 9px; border-radius: 20px;
+      font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
     }
+    .b-blue   { background: var(--blue-s);  color: var(--blue);   border: 1px solid rgba(79,142,247,.3); }
+    .b-green  { background: var(--green-s); color: var(--green);  border: 1px solid rgba(61,211,153,.3); }
+    .b-yellow { background: var(--yel-s);   color: var(--yellow); border: 1px solid rgba(240,180,41,.3); }
+    .b-red    { background: var(--red-s);   color: var(--red);    border: 1px solid rgba(248,113,113,.3); }
+    .b-grey   { background: var(--panel3);  color: var(--tx3);    border: 1px solid var(--border); }
 
-    .stage-item.failed .stage-icon {
-      background: var(--danger-glow);
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .stage-item.running {
-      color: var(--text);
-    }
-
-    .stage-item.complete {
-      color: var(--text-2);
-    }
-
-    @keyframes spinPulse {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 0 var(--accent-glow);
-      }
-
-      50% {
-        box-shadow: 0 0 0 4px var(--accent-glow);
-      }
-    }
-
-    .stage-label {
-      flex: 1;
-    }
-
-    .stage-status-text {
-      font-size: 10px;
-      color: var(--text-3);
-    }
-
-    .stage-item.running .stage-status-text {
-      color: var(--accent);
-    }
-
-    .stage-item.complete .stage-status-text {
-      color: var(--green);
-    }
-
-    /* ── Main content ─────────────────────────────────────────────────────── */
-    main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    /* ── Section panels ───────────────────────────────────────────────────── */
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 18px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .panel-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      flex: 1;
-    }
-
-    .panel-badge {
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-    }
-
-    .badge-blue {
-      background: var(--accent-glow);
-      color: var(--accent);
-      border: 1px solid rgba(79, 142, 247, 0.3);
-    }
-
-    .badge-green {
-      background: var(--green-glow);
-      color: var(--green);
-      border: 1px solid rgba(61, 214, 140, 0.3);
-    }
-
-    .badge-yellow {
-      background: rgba(245, 197, 66, 0.12);
-      color: var(--yellow);
-      border: 1px solid rgba(245, 197, 66, 0.3);
-    }
-
-    .badge-red {
-      background: var(--danger-glow);
-      color: var(--danger);
-      border: 1px solid rgba(240, 84, 84, 0.3);
-    }
-
-    .badge-grey {
-      background: var(--surface-3);
-      color: var(--text-3);
-      border: 1px solid var(--border);
-    }
-
-    /* ── Email Input Panel ────────────────────────────────────────────────── */
-    .email-body {
-      padding: 16px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
+    /* ── Email panel ── */
+    .email-body { padding: 16px 17px; display: flex; flex-direction: column; gap: 12px; }
     textarea#email-input {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1.65;
-      color: var(--text-2);
-      outline: none;
-      resize: vertical;
-      min-height: 130px;
-      max-height: 260px;
-      transition: border-color 0.2s;
+      width: 100%; background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--r2); padding: 13px 14px;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--tx2);
+      outline: none; resize: vertical; min-height: 160px; max-height: 320px;
+      transition: border-color .2s;
     }
+    textarea#email-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,142,247,.08); }
+    .email-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
-    textarea#email-input:focus {
-      border-color: var(--accent);
-    }
+    /* toggle */
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tx2); cursor: pointer; user-select: none; }
+    .toggle { position: relative; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .tog-t { position: absolute; inset: 0; background: var(--panel3); border: 1px solid var(--border2); border-radius: 20px; cursor: pointer; transition: all .2s; }
+    .tog-th { position: absolute; top: 3px; left: 3px; width: 13px; height: 13px; border-radius: 50%; background: var(--tx3); transition: transform .2s, background .2s; }
+    .toggle input:checked + .tog-t  { background: var(--blue-d); border-color: var(--blue); }
+    .toggle input:checked ~ .tog-th { transform: translateX(16px); background: var(--blue); }
 
-    .email-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .toggle-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--text-2);
-      cursor: pointer;
-      user-select: none;
-    }
-
-    /* custom toggle */
-    .toggle {
-      position: relative;
-      width: 36px;
-      height: 20px;
-    }
-
-    .toggle input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .toggle-track {
-      position: absolute;
-      inset: 0;
-      background: var(--surface-3);
-      border: 1px solid var(--border-2);
-      border-radius: 20px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .toggle-thumb {
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 13px;
-      height: 13px;
-      border-radius: 50%;
-      background: var(--text-3);
-      transition: transform 0.2s, background 0.2s;
-    }
-
-    .toggle input:checked+.toggle-track {
-      background: var(--accent-dim);
-      border-color: var(--accent);
-    }
-
-    .toggle input:checked~.toggle-thumb {
-      transform: translateX(16px);
-      background: var(--accent);
-    }
-
+    /* buttons */
     .btn {
-      padding: 9px 18px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      transition: transform 0.1s, opacity 0.15s;
+      padding: 9px 17px; border-radius: var(--r2);
+      font-size: 13px; font-weight: 600; font-family: var(--font);
+      cursor: pointer; border: none;
+      display: inline-flex; align-items: center; gap: 7px;
+      transition: filter .15s, transform .1s, opacity .15s;
     }
-
-    .btn:active {
-      transform: scale(0.97);
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.14); }
+    .btn-success { background: var(--green); color: #031a0d; }
+    .btn-success:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-danger  { background: var(--red); color: #fff; }
+    .btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-ghost {
+      background: transparent; color: var(--tx2);
+      border: 1px solid var(--border2); padding: 7px 13px; font-size: 12px;
     }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+    .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid transparent; border-top-color: currentColor; animation: spin .65s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    .btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
+    /* ── Pipeline progress track ── */
+    .pipe-wrap { padding: 22px 22px 14px; }
+    .pipe-track { display: flex; align-items: flex-start; position: relative; }
+    .pipe-track::before { content:''; position:absolute; top:17px; left:12.5%; right:12.5%; height:2px; background:var(--border2); z-index:0; }
+    .pipe-step { flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; position:relative; z-index:1; }
+    .pipe-dot {
+      width:34px; height:34px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:700;
+      background:var(--panel2); border:2px solid var(--border2); color:var(--tx3);
+      transition: all .35s;
     }
+    .pipe-step.running  .pipe-dot { background:var(--blue-s); border-color:var(--blue); color:var(--blue); animation:pPing 1.4s ease-in-out infinite; }
+    .pipe-step.complete .pipe-dot { background:var(--green-s); border-color:var(--green); color:var(--green); box-shadow:0 0 14px rgba(61,211,153,.28); }
+    .pipe-step.failed   .pipe-dot { background:var(--red-s); border-color:var(--red); color:var(--red); }
+    @keyframes pPing { 0%,100%{box-shadow:0 0 0 2px rgba(79,142,247,.1)} 50%{box-shadow:0 0 0 10px rgba(79,142,247,.12)} }
+    .pipe-step.complete::after { content:''; position:absolute; top:16px; left:50%; right:-50%; height:2px; background:var(--green); z-index:0; }
+    .pipe-step:last-child::after { display:none; }
+    .pipe-lbl { font-size:11px; font-weight:500; color:var(--tx3); text-align:center; line-height:1.3; transition:color .3s; }
+    .pipe-step.running  .pipe-lbl { color:var(--blue); }
+    .pipe-step.complete .pipe-lbl { color:var(--green); }
+    .pipe-msg { margin-top:14px; font-size:12px; color:var(--tx3); text-align:center; }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      filter: brightness(1.12);
-    }
-
-    .btn-success {
-      background: var(--green);
-      color: #0b1a11;
-    }
-
-    .btn-success:hover:not(:disabled) {
-      filter: brightness(1.12);
-    }
-
-    .btn-danger {
-      background: var(--danger);
-      color: #fff;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      filter: brightness(1.12);
-    }
-
-    .btn-outline {
-      background: transparent;
-      color: var(--text-2);
-      border: 1px solid var(--border-2);
-    }
-
-    .btn-outline:hover:not(:disabled) {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .spinner {
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      border: 2px solid transparent;
-      border-top-color: currentColor;
-      animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    /* ── Approval Banner ──────────────────────────────────────────────────── */
+    /* ── Approval Banner ── */
     #approval-banner {
-      display: none;
-      background: linear-gradient(135deg, rgba(245, 197, 66, 0.08), rgba(245, 197, 66, 0.04));
-      border: 1px solid rgba(245, 197, 66, 0.35);
-      border-radius: var(--radius-lg);
-      padding: 18px 22px;
-      gap: 16px;
-      flex-direction: column;
+      display: none; flex-direction: column; gap: 12px;
+      background: linear-gradient(135deg, rgba(240,180,41,.07), transparent);
+      border: 1px solid rgba(240,180,41,.3); border-radius: var(--r3); padding: 18px 20px;
     }
+    #approval-banner.vis { display: flex; }
+    .appr-title { font-size: 15px; font-weight: 700; color: var(--yellow); }
+    .appr-sub   { font-size: 12px; color: var(--tx2); line-height: 1.6; margin-top: 3px; }
+    .appr-btns  { display: flex; gap: 10px; }
 
-    #approval-banner.visible {
-      display: flex;
+    /* ── Results: expandable cards ── */
+    .res-card { background: var(--panel2); border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; }
+    .res-hd {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 15px; cursor: pointer; user-select: none;
+      transition: background .15s;
     }
+    .res-hd:hover { background: var(--panel3); }
+    .res-icon { font-size: 16px; }
+    .res-name { font-size: 13px; font-weight: 600; flex: 1; }
+    .chevron { font-size: 10px; color: var(--tx3); transition: transform .22s; }
+    .res-card.open .chevron { transform: rotate(180deg); }
+    .res-body { display: none; padding: 0 15px 14px; }
+    .res-card.open .res-body { display: block; }
 
-    .approval-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    /* Data rows inside result cards */
+    .data-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; }
+    .data-row { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .data-row:last-child { border-bottom: none; }
+    .data-key { font-family: var(--mono); font-size: 11px; color: var(--blue); min-width: 150px; flex-shrink: 0; padding-top: 2px; text-transform: lowercase; }
+    .data-val { color: var(--tx2); word-break: break-word; line-height: 1.5; }
+    .data-val.green  { color: var(--green); font-weight: 500; }
+    .data-val.yellow { color: var(--yellow); }
+    .data-val.list { display: flex; flex-direction: column; gap: 2px; }
+    .data-val.list .li::before { content: '• '; color: var(--tx3); }
 
-    .approval-icon {
-      font-size: 22px;
-    }
+    /* JSON fallback */
+    .json-pre { font-family: var(--mono); font-size: 11.5px; line-height: 1.75; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; white-space: pre; }
+    .jk { color: #79c0ff; } .js { color: #a5d6a7; } .jn { color: #fdba74; } .jb { color: #c084fc; } .jl { color: var(--tx3); } .jp { color: var(--tx2); }
 
-    .approval-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--yellow);
-    }
+    /* ── Audit table ── */
+    .tbl-wrap { padding: 0 17px 16px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align:left; padding:9px 10px; border-bottom:1px solid var(--border2); color:var(--tx3); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; white-space:nowrap; }
+    td { padding:8px 10px; border-bottom:1px solid var(--border); color:var(--tx2); vertical-align:top; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:var(--panel2); }
+    .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; }
+    .pill-ok  { background:var(--green-s); color:var(--green); }
+    .pill-run { background:var(--blue-s);  color:var(--blue); }
+    .pill-err { background:var(--red-s);   color:var(--red); }
 
-    .approval-sub {
-      font-size: 12px;
-      color: var(--text-2);
-      line-height: 1.5;
-    }
+    /* ── Memory grid ── */
+    .mem-wrap  { padding: 0 17px 16px; }
+    .mem-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 8px; }
+    .mem-card  { background: var(--panel2); border: 1px solid var(--border); border-radius: var(--r2); padding: 12px 14px; }
+    .mem-key   { font-family: var(--mono); font-size: 10px; color: var(--blue); font-weight: 600; margin-bottom: 4px; }
+    .mem-val   { font-size: 12px; color: var(--tx2); line-height: 1.5; word-break: break-word; }
 
-    .approval-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    /* ── Result Cards ─────────────────────────────────────────────────────── */
-    #results-panel {
-      display: none;
-    }
-
-    #results-panel.visible {
-      display: block;
-    }
-
-    .result-cards {
-      padding: 14px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .result-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-
-    .result-card-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 11px 14px;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s;
-    }
-
-    .result-card-header:hover {
-      background: var(--surface-3);
-    }
-
-    .result-card-icon {
-      font-size: 15px;
-    }
-
-    .result-card-name {
-      font-size: 13px;
-      font-weight: 500;
-      flex: 1;
-    }
-
-    .result-card-chevron {
-      font-size: 11px;
-      color: var(--text-3);
-      transition: transform 0.2s;
-    }
-
-    .result-card.open .result-card-chevron {
-      transform: rotate(180deg);
-    }
-
-    .result-card-body {
-      display: none;
-      padding: 0 14px 14px;
-    }
-
-    .result-card.open .result-card-body {
-      display: block;
-    }
-
-    /* JSON renderer */
-    .json-tree {
-      font-family: var(--mono);
-      font-size: 11.5px;
-      line-height: 1.7;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      overflow-x: auto;
-      white-space: pre;
-    }
-
-    .jt-key {
-      color: #79c0ff;
-    }
-
-    .jt-str {
-      color: #a5d6a7;
-    }
-
-    .jt-num {
-      color: #f8a97f;
-    }
-
-    .jt-bool {
-      color: var(--purple);
-    }
-
-    .jt-null {
-      color: var(--text-3);
-    }
-
-    .jt-brace {
-      color: var(--text-2);
-    }
-
-    /* ── Progress panel (inside pipeline) ────────────────────────────────── */
-    .progress-bar-wrap {
-      padding: 16px 18px 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .progress-stages {
-      display: flex;
-      gap: 0;
-      position: relative;
-    }
-
-    .progress-stage {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      position: relative;
-    }
-
-    .progress-stage::before {
-      content: '';
-      position: absolute;
-      top: 14px;
-      left: 50%;
-      right: -50%;
-      height: 2px;
-      background: var(--border-2);
-      z-index: 0;
-    }
-
-    .progress-stage:last-child::before {
-      display: none;
-    }
-
-    .progress-stage-dot {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 600;
-      background: var(--surface-3);
-      border: 2px solid var(--border-2);
-      color: var(--text-3);
-      z-index: 1;
-      position: relative;
-      transition: all 0.3s;
-    }
-
-    .progress-stage.running .progress-stage-dot {
-      background: var(--accent-glow);
-      border-color: var(--accent);
-      color: var(--accent);
-      box-shadow: 0 0 12px var(--accent-glow);
-      animation: dotPulse 1.2s ease-in-out infinite;
-    }
-
-    .progress-stage.complete .progress-stage-dot {
-      background: var(--green-glow);
-      border-color: var(--green);
-      color: var(--green);
-      box-shadow: 0 0 10px var(--green-glow);
-    }
-
-    .progress-stage.failed .progress-stage-dot {
-      background: var(--danger-glow);
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .progress-stage.complete::before {
-      background: var(--green);
-    }
-
-    @keyframes dotPulse {
-
-      0%,
-      100% {
-        box-shadow: 0 0 6px var(--accent-glow);
-      }
-
-      50% {
-        box-shadow: 0 0 16px var(--accent-glow);
-      }
-    }
-
-    .progress-stage-label {
-      font-size: 10px;
-      color: var(--text-3);
-      text-align: center;
-      line-height: 1.3;
-    }
-
-    .progress-stage.running .progress-stage-label {
-      color: var(--accent);
-    }
-
-    .progress-stage.complete .progress-stage-label {
-      color: var(--green);
-    }
-
-    /* ── Audit Log Panel ──────────────────────────────────────────────────── */
-    .audit-body {
-      padding: 14px 18px;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-
-    th {
-      text-align: left;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border-2);
-      color: var(--text-3);
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    td {
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-2);
-      vertical-align: top;
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:hover td {
-      background: var(--surface-3);
-    }
-
-    .status-pill {
-      padding: 2px 7px;
-      border-radius: 20px;
-      font-size: 10px;
-      font-weight: 600;
-    }
-
-    .pill-success {
-      background: var(--green-glow);
-      color: var(--green);
-    }
-
-    .pill-running {
-      background: var(--accent-glow);
-      color: var(--accent);
-    }
-
-    .pill-error {
-      background: var(--danger-glow);
-      color: var(--danger);
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 30px;
-      color: var(--text-3);
-      font-size: 13px;
-    }
-
-    /* ── Memory Panel ─────────────────────────────────────────────────────── */
-    .memory-grid {
-      padding: 14px 18px;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 10px;
-    }
-
-    .memory-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-    }
-
-    .memory-card-key {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--accent);
-      margin-bottom: 5px;
-      font-weight: 500;
-    }
-
-    .memory-card-val {
-      font-size: 12px;
-      color: var(--text-2);
-      line-height: 1.5;
-      word-break: break-word;
-    }
+    .empty { text-align: center; padding: 32px; color: var(--tx3); font-size: 13px; }
   </style>
 </head>
-
 <body>
 
-  <div id="toast-container"></div>
+<div id="toasts"></div>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
-  <header>
-    <div class="logo-mark">🧠</div>
-    <h1>Maverick AI <span>— Caregiver OS</span></h1>
-    <div class="header-right">
-      <div class="api-status">
-        <div class="status-dot" id="api-dot"></div>
-        <span id="api-label">localhost:8000</span>
-      </div>
+<!-- ── Header ── -->
+<header>
+  <div class="logo">🧠</div>
+  <h1>Maverick AI <span>— Caregiver OS</span></h1>
+  <div class="hdr-right">
+    <div class="api-badge">
+      <div class="dot" id="api-dot"></div>
+      <span id="api-lbl">Connecting…</span>
     </div>
-  </header>
+  </div>
+</header>
 
-  <div class="layout">
+<div class="shell">
 
-    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
-    <aside>
-      <!-- <nav class="sidebar-nav">
-        <button class="nav-item active" onclick="scrollTo('email-panel')">
-          <span class="icon">✉️</span> Email Input
-        </button>
-        <button class="nav-item" onclick="scrollTo('pipeline-panel')">
-          <span class="icon">⚙️</span> Pipeline
-        </button>
-        <button class="nav-item" onclick="scrollTo('results-panel')">
-          <span class="icon">📊</span> Results
-        </button>
-        <button class="nav-item" onclick="scrollTo('audit-panel')">
-          <span class="icon">📋</span> Audit Logs
-        </button>
-        <button class="nav-item" onclick="scrollTo('memory-panel')">
-          <span class="icon">🧠</span> Memory
-        </button>
-      </nav> -->
+  <!-- ── Sidebar ── -->
+  <aside>
+    <!-- Tab navigation -->
+    <div class="sb-nav">
+      <button class="sb-tab active" id="nav-process" onclick="switchTab('process')">
+        <span class="sb-tab-icon">⚙️</span> Process
+      </button>
+      <button class="sb-tab" id="nav-results" onclick="switchTab('results')">
+        <span class="sb-tab-icon">📊</span> Results
+        <span class="sb-tab-badge" id="badge-results">✓</span>
+      </button>
+      <button class="sb-tab" id="nav-audit" onclick="switchTab('audit')">
+        <span class="sb-tab-icon">📋</span> Audit Logs
+      </button>
+      <button class="sb-tab" id="nav-memory" onclick="switchTab('memory')">
+        <span class="sb-tab-icon">🧠</span> Memory
+      </button>
+    </div>
 
-      <!-- Pipeline stage statuses -->
-      <div class="sidebar-section">
-        <h3>Pipeline Stages</h3>
-        <div class="stage-list">
-          <div class="stage-item pending" id="sidebar-stage-email">
-            <div class="stage-icon">✦</div>
-            <div class="stage-label">
-              <div>Email Agent</div>
-              <div class="stage-status-text" id="sidebar-status-email">Pending</div>
-            </div>
-          </div>
-          <div class="stage-item pending" id="sidebar-stage-memory">
-            <div class="stage-icon">✦</div>
-            <div class="stage-label">
-              <div>Memory Agent</div>
-              <div class="stage-status-text" id="sidebar-status-memory">Pending</div>
-            </div>
-          </div>
-          <div class="stage-item pending" id="sidebar-stage-logistics">
-            <div class="stage-icon">✦</div>
-            <div class="stage-label">
-              <div>Logistics Agent</div>
-              <div class="stage-status-text" id="sidebar-status-logistics">Pending</div>
-            </div>
-          </div>
-          <div class="stage-item pending" id="sidebar-stage-council">
-            <div class="stage-icon">✦</div>
-            <div class="stage-label">
-              <div>Council Agent</div>
-              <div class="stage-status-text" id="sidebar-status-council">Pending</div>
-            </div>
-          </div>
+    <!-- Pipeline stages -->
+    <div class="sb-stages">
+      <div class="sb-stages-lbl">Pipeline</div>
+      <div class="stage-item pending" id="si-email">
+        <div class="stage-num" id="sn-email">1</div>
+        <div class="stage-info">
+          <div class="stage-name">Email Agent</div>
+          <div class="stage-st" id="ss-email">Pending</div>
         </div>
       </div>
-
-      <div class="sidebar-section" style="flex:1; overflow-y:auto;">
-        <h3>Last Run Status</h3>
-        <div id="last-run-status" style="font-size:12px; color:var(--text-3);">No run yet.</div>
+      <div class="stage-item pending" id="si-memory">
+        <div class="stage-num" id="sn-memory">2</div>
+        <div class="stage-info">
+          <div class="stage-name">Memory Agent</div>
+          <div class="stage-st" id="ss-memory">Pending</div>
+        </div>
       </div>
-    </aside>
+      <div class="stage-item pending" id="si-logistics">
+        <div class="stage-num" id="sn-logistics">3</div>
+        <div class="stage-info">
+          <div class="stage-name">Logistics Agent</div>
+          <div class="stage-st" id="ss-logistics">Pending</div>
+        </div>
+      </div>
+      <div class="stage-item pending" id="si-council">
+        <div class="stage-num" id="sn-council">4</div>
+        <div class="stage-info">
+          <div class="stage-name">Council Agent</div>
+          <div class="stage-st" id="ss-council">Pending</div>
+        </div>
+      </div>
+    </div>
 
-    <!-- ── Main ──────────────────────────────────────────────────────────── -->
-    <main id="main-scroll">
+    <div class="sb-footer">
+      <div class="sb-footer-lbl">Last Run</div>
+      <div id="last-run">No run yet.</div>
+    </div>
+  </aside>
 
-      <!-- 1. Email Input Panel -->
-      <div class="panel" id="email-panel">
-        <div class="panel-header">
-          <span style="font-size:16px;">✉️</span>
-          <span class="panel-title">Email Input</span>
-          <span class="panel-badge badge-blue">Input</span>
+  <!-- ── Tab content ── -->
+  <div class="tab-area">
+
+    <!-- TAB 1: Process (Email Input + Pipeline Progress) -->
+    <div class="tab-pane active" id="pane-process">
+
+      <div class="card" id="email-card">
+        <div class="card-hd">
+          <span class="card-icon">✉️</span>
+          <span class="card-title">Email Input</span>
+          <span class="badge b-blue">Input</span>
         </div>
         <div class="email-body">
           <textarea id="email-input">Hi Dr. Patel's office,
@@ -1075,540 +413,413 @@ Could you please confirm the appointment and let us know what documents to bring
 Thank you,
 Patrick</textarea>
 
-          <div class="email-actions">
+          <div class="email-foot">
             <label class="toggle-wrap" for="approval-toggle">
               <div class="toggle">
                 <input type="checkbox" id="approval-toggle" />
-                <div class="toggle-track"></div>
-                <div class="toggle-thumb"></div>
+                <div class="tog-t"></div>
+                <div class="tog-th"></div>
               </div>
               Require Human Approval
             </label>
-
-            <button class="btn btn-primary" id="process-btn" onclick="processEmail()">
-              <span id="process-btn-icon">▶</span>
-              <span id="process-btn-label">Process Email</span>
-            </button>
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+              <button class="btn btn-ghost" onclick="clearRun()">🗑 Clear</button>
+              <button class="btn btn-primary" id="process-btn" onclick="processEmail()">
+                <span id="btn-ico">▶</span>
+                <span id="btn-lbl">Process Email</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 2. Approval Banner (shown when awaiting_approval) -->
+      <!-- Approval Banner -->
       <div id="approval-banner">
-        <div class="approval-header">
-          <span class="approval-icon">⏸️</span>
-          <div>
-            <div class="approval-title">Awaiting Human Approval</div>
-            <div class="approval-sub">
-              Stages 1–3 completed. Review the logistics analysis for conflicts before the Council Agent deliberates.
+        <div>
+          <div class="appr-title">⏸ Awaiting Human Approval</div>
+          <div class="appr-sub">Stages 1–3 complete. Review logistics before the Council Agent deliberates.</div>
+        </div>
+        <div class="appr-btns">
+          <button class="btn btn-success" onclick="approveRun()">✅ Approve — Run Council</button>
+          <button class="btn btn-danger"  onclick="rejectRun()">❌ Reject</button>
+        </div>
+      </div>
+
+      <!-- Pipeline Progress -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-icon">⚙️</span>
+          <span class="card-title">Pipeline Progress</span>
+          <span class="badge b-grey" id="pipe-badge">Idle</span>
+        </div>
+        <div class="pipe-wrap">
+          <div class="pipe-track">
+            <div class="pipe-step pending" id="ps-email">
+              <div class="pipe-dot" id="pd-email">1</div>
+              <div class="pipe-lbl">Email<br>Agent</div>
+            </div>
+            <div class="pipe-step pending" id="ps-memory">
+              <div class="pipe-dot" id="pd-memory">2</div>
+              <div class="pipe-lbl">Memory<br>Agent</div>
+            </div>
+            <div class="pipe-step pending" id="ps-logistics">
+              <div class="pipe-dot" id="pd-logistics">3</div>
+              <div class="pipe-lbl">Logistics<br>Agent</div>
+            </div>
+            <div class="pipe-step pending" id="ps-council">
+              <div class="pipe-dot" id="pd-council">4</div>
+              <div class="pipe-lbl">Council<br>Agent</div>
             </div>
           </div>
-        </div>
-        <div class="approval-actions">
-          <button class="btn btn-success" onclick="approveRun()">
-            ✅ Approve — Run Council
-          </button>
-          <button class="btn btn-danger" onclick="rejectRun()">
-            ❌ Reject
-          </button>
+          <div class="pipe-msg" id="pipe-msg">Submit an email to start the pipeline.</div>
         </div>
       </div>
 
-      <!-- 3. Pipeline Progress Panel -->
-      <div class="panel" id="pipeline-panel">
-        <div class="panel-header">
-          <span style="font-size:16px;">⚙️</span>
-          <span class="panel-title">Pipeline Progress</span>
-          <span class="panel-badge badge-grey" id="pipeline-badge">Idle</span>
+    </div><!-- /pane-process -->
+
+    <!-- TAB 2: Results -->
+    <div class="tab-pane" id="pane-results">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-icon">📊</span>
+          <span class="card-title">Agent Results</span>
+          <span class="badge b-grey" id="res-badge">—</span>
         </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-stages">
-            <div class="progress-stage pending" id="ps-email">
-              <div class="progress-stage-dot" id="psd-email">1</div>
-              <div class="progress-stage-label">Email<br>Agent</div>
-            </div>
-            <div class="progress-stage pending" id="ps-memory">
-              <div class="progress-stage-dot" id="psd-memory">2</div>
-              <div class="progress-stage-label">Memory<br>Agent</div>
-            </div>
-            <div class="progress-stage pending" id="ps-logistics">
-              <div class="progress-stage-dot" id="psd-logistics">3</div>
-              <div class="progress-stage-label">Logistics<br>Agent</div>
-            </div>
-            <div class="progress-stage pending" id="ps-council">
-              <div class="progress-stage-dot" id="psd-council">4</div>
-              <div class="progress-stage-label">Council<br>Agent</div>
-            </div>
-          </div>
-        </div>
-        <div style="padding: 6px 18px 14px; font-size:12px; color:var(--text-3);" id="pipeline-sub-msg">
-          Submit an email above to start the pipeline.
+        <div style="padding:14px 17px; display:flex; flex-direction:column; gap:8px;" id="res-list">
+          <div class="empty">Run the pipeline first to see results here.</div>
         </div>
       </div>
+    </div>
 
-      <!-- 4. Results Panel -->
-      <div class="panel" id="results-panel">
-        <div class="panel-header">
-          <span style="font-size:16px;">📊</span>
-          <span class="panel-title">Agent Results</span>
-          <span class="panel-badge badge-grey" id="results-status-badge">—</span>
+    <!-- TAB 3: Audit Logs -->
+    <div class="tab-pane" id="pane-audit">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-icon">📋</span>
+          <span class="card-title">Audit Logs</span>
+          <button class="btn btn-ghost" onclick="loadAudit()">🔄 Refresh</button>
         </div>
-        <div class="result-cards" id="result-cards">
-          <!-- filled by JS -->
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Agent</th><th>Status</th><th>Summary</th></tr></thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="4" class="empty">Click Refresh to load audit logs.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
+    </div>
 
-      <!-- 5. Audit Log Panel -->
-      <div class="panel" id="audit-panel">
-        <div class="panel-header">
-          <span style="font-size:16px;">📋</span>
-          <span class="panel-title">Audit Logs</span>
-          <button class="btn btn-outline" style="padding:6px 12px; font-size:12px;" onclick="loadAuditLogs()">
-            🔄 Refresh Logs
-          </button>
+    <!-- TAB 4: Memory -->
+    <div class="tab-pane" id="pane-memory">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-icon">🧠</span>
+          <span class="card-title">Patient Memory</span>
+          <button class="btn btn-ghost" onclick="loadMemory()">🔄 Load</button>
         </div>
-        <div class="audit-body">
-          <div class="table-wrap">
-            <table id="audit-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Agent</th>
-                  <th>Status</th>
-                  <th>Input</th>
-                  <th>Output</th>
-                </tr>
-              </thead>
-              <tbody id="audit-tbody">
-                <tr>
-                  <td colspan="5" class="empty-state">Click "Refresh Logs" to load audit data.</td>
-                </tr>
-              </tbody>
-            </table>
+        <div class="mem-wrap">
+          <div class="mem-grid" id="mem-grid">
+            <div class="empty" style="grid-column:1/-1">Click Load to view patient context.</div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- 6. Memory Panel -->
-      <div class="panel" id="memory-panel">
-        <div class="panel-header">
-          <span style="font-size:16px;">🧠</span>
-          <span class="panel-title">Patient Memory</span>
-          <button class="btn btn-outline" style="padding:6px 12px; font-size:12px;" onclick="loadMemory()">
-            🔄 View Memory
-          </button>
-        </div>
-        <div class="memory-grid" id="memory-grid">
-          <div class="empty-state" style="grid-column:1/-1;">Click "View Memory" to load patient context.</div>
-        </div>
+  </div><!-- /tab-area -->
+</div><!-- /shell -->
+
+<script>
+'use strict';
+
+const API = (location.protocol === 'file:')
+  ? 'http://localhost:8000/api'
+  : `${location.origin}/api`;
+
+const STAGES = ['email','memory','logistics','council'];
+const STAGE_KEYS = {
+  email:     'email_analysis complete',
+  memory:    'memory_context complete',
+  logistics: 'logistics_analysis complete',
+  council:   'council_recommendation complete',
+};
+const STAGE_DESC = { email:'Extracting…', memory:'Retrieving…', logistics:'Analysing…', council:'Deliberating…' };
+const CARD_CFG = [
+  {key:'email_analysis',         icon:'📧', name:'Email Agent',     stage:'email'},
+  {key:'memory_context',         icon:'🧠', name:'Memory Agent',    stage:'memory'},
+  {key:'logistics_analysis',     icon:'🗓️', name:'Logistics Agent', stage:'logistics'},
+  {key:'council_recommendation', icon:'⚖️', name:'Council Agent',   stage:'council'},
+];
+
+let _pending = null;
+
+/* helpers */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function toast(msg, type='error'){
+  const el = document.createElement('div');
+  el.className = `toast ${type}`; el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>el.remove(), 4200);
+}
+
+/* tab switching */
+function switchTab(tab){
+  document.querySelectorAll('.sb-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  document.getElementById(`pane-${tab}`).classList.add('active');
+}
+
+/* health */
+async function checkHealth(){
+  const dot=document.getElementById('api-dot'), lbl=document.getElementById('api-lbl');
+  try{
+    const r=await fetch(`${API}/health`,{signal:AbortSignal.timeout(3000)});
+    if(r.ok){dot.classList.remove('off');lbl.textContent='API online';}else throw 0;
+  }catch{dot.classList.add('off');lbl.textContent='API offline';}
+}
+checkHealth(); setInterval(checkHealth,12000);
+
+/* pipeline stage state */
+function setStage(s, state){
+  // sidebar
+  const si=document.getElementById(`si-${s}`);
+  const sn=document.getElementById(`sn-${s}`);
+  const ss=document.getElementById(`ss-${s}`);
+  si.className=`stage-item ${state}`;
+  sn.textContent=state==='complete'?'✓':state==='failed'?'✗':STAGES.indexOf(s)+1;
+  ss.textContent=state==='running'?STAGE_DESC[s]:state==='complete'?'Complete ✓':state==='failed'?'Failed ✗':'Pending';
+
+  // progress bar
+  const ps=document.getElementById(`ps-${s}`);
+  const pd=document.getElementById(`pd-${s}`);
+  ps.className=`pipe-step ${state}`;
+  pd.textContent=state==='complete'?'✓':state==='failed'?'✗':STAGES.indexOf(s)+1;
+}
+
+function resetStages(){
+  STAGES.forEach(s=>setStage(s,'pending'));
+  setPipeBadge('idle');
+  document.getElementById('pipe-msg').textContent='Processing…';
+}
+
+function markDone(stages_completed){
+  STAGES.forEach(s=>{ if(stages_completed.includes(STAGE_KEYS[s])) setStage(s,'complete'); });
+}
+
+function setPipeBadge(status){
+  const b=document.getElementById('pipe-badge');
+  const M={idle:['b-grey','Idle'],running:['b-blue','Running'],awaiting_approval:['b-yellow','Awaiting'],completed:['b-green','Completed'],failed:['b-red','Failed']};
+  const[cls,lbl]=M[status]||['b-grey',status];
+  b.className=`badge ${cls}`; b.textContent=lbl;
+}
+
+function setBtnLoading(on){
+  const btn=document.getElementById('process-btn');
+  const ico=document.getElementById('btn-ico');
+  const lbl=document.getElementById('btn-lbl');
+  btn.disabled=on;
+  if(on){ico.innerHTML='<div class="spinner"></div>';lbl.textContent='Processing…';}
+  else{ico.textContent='▶';lbl.textContent='Process Email';}
+}
+
+/* result card renderer */
+function renderVal(v){
+  if(v===null||v===undefined) return `<span style="color:var(--tx3)">—</span>`;
+  if(typeof v==='boolean') return `<span style="color:var(--purple)">${v}</span>`;
+  if(Array.isArray(v)){
+    if(!v.length) return `<span style="color:var(--tx3)">none</span>`;
+    return `<div class="data-val list">${v.map(i=>`<span class="li">${esc(String(i))}</span>`).join('')}</div>`;
+  }
+  if(typeof v==='object') return renderObject(v);
+  const s=String(v);
+  return `<span>${esc(s)}</span>`;
+}
+
+function renderObject(obj){
+  return '<div style="display:flex;flex-direction:column;gap:3px;">' +
+    Object.entries(obj).map(([k,v])=>`<div style="font-size:12px;"><span style="color:var(--tx3);font-family:var(--mono);font-size:10px;">${esc(k)}: </span>${typeof v==='object'&&v!==null?renderVal(v):`<span style="color:var(--tx2)">${esc(String(v))}</span>`}</div>`).join('') +
+  '</div>';
+}
+
+function buildResultCards(state){
+  const list=document.getElementById('res-list');
+  list.innerHTML='';
+  CARD_CFG.forEach((cfg,idx)=>{
+    const data=state[cfg.key];
+    const done=(state.stages_completed||[]).includes(STAGE_KEYS[cfg.stage]);
+    const waiting=state.status==='awaiting_approval'&&cfg.stage==='council';
+    const bClass=done?'b-green':waiting?'b-yellow':'b-grey';
+    const bText=done?'Complete':waiting?'Awaiting':'Pending';
+    const hasData=data&&Object.keys(data).length>0;
+    const isOpen=done||idx===0;
+
+    const rows=hasData
+      ? Object.entries(data).map(([k,v])=>`
+        <div class="data-row">
+          <div class="data-key">${esc(k.replace(/_/g,' '))}</div>
+          <div class="data-val">${renderVal(v)}</div>
+        </div>`).join('')
+      : '<div class="empty" style="padding:12px 0;">No data yet.</div>';
+
+    const card=document.createElement('div');
+    card.className=`res-card${isOpen?' open':''}`;
+    card.innerHTML=`
+      <div class="res-hd" onclick="this.parentElement.classList.toggle('open')">
+        <span class="res-icon">${cfg.icon}</span>
+        <span class="res-name">${cfg.name}</span>
+        <span class="badge ${bClass}">${bText}</span>
+        <span class="chevron">▼</span>
       </div>
+      <div class="res-body"><div class="data-wrap">${rows}</div></div>`;
+    list.appendChild(card);
+  });
 
-    </main>
-  </div>
+  const rb=document.getElementById('res-badge');
+  const M={completed:['b-green','Completed'],awaiting_approval:['b-yellow','Awaiting'],failed:['b-red','Failed']};
+  const[bc,bt]=M[state.status]||['b-grey','—'];
+  rb.className=`badge ${bc}`; rb.textContent=bt;
 
-  <script>
-    'use strict';
+  // show badge on Results tab
+  document.getElementById('badge-results').classList.add('vis');
+}
 
-    const API = 'http://localhost:8000/api';
+/* processEmail */
+async function processEmail(){
+  const email=document.getElementById('email-input').value.trim();
+  if(!email){toast('Email body cannot be empty.');return;}
+  const req=document.getElementById('approval-toggle').checked;
 
-    // ── Stored state for approval flow ─────────────────────────────────────────
-    let _pendingState = null;
+  _pending=null;
+  resetStages();
+  setBtnLoading(true);
+  setPipeBadge('running');
+  document.getElementById('approval-banner').classList.remove('vis');
+  document.getElementById('pipe-msg').textContent='Processing… usually 15–30 seconds.';
+  document.getElementById('last-run').textContent='Running…';
+  document.getElementById('last-run').style.color='var(--blue)';
 
-    // ── Scroll helper ───────────────────────────────────────────────────────────
-    function scrollTo(id) {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      event?.currentTarget?.classList.add('active');
+  const timers=STAGES.map((s,i)=>setTimeout(()=>{
+    if(document.getElementById(`ps-${s}`).classList.contains('pending')) setStage(s,'running');
+  }, i*2200));
+
+  try{
+    const res=await fetch(`${API}/process-email`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email, require_approval:req}),
+    });
+    timers.forEach(clearTimeout);
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${res.status}`);}
+    const data=await res.json();
+
+    markDone(data.stages_completed||[]);
+    setPipeBadge(data.status);
+    buildResultCards(data);
+
+    if(data.status==='awaiting_approval'){
+      _pending={...data,raw_email:email};
+      document.getElementById('approval-banner').classList.add('vis');
+      document.getElementById('pipe-msg').textContent='⏸ Paused — approve or reject to continue.';
+      document.getElementById('last-run').innerHTML='<span style="color:var(--yellow)">⏸ Awaiting</span>';
+      toast('Pipeline paused — approve or reject.','warn');
+    } else if(data.status==='completed'){
+      document.getElementById('pipe-msg').textContent='✅ All 4 stages completed!';
+      document.getElementById('last-run').innerHTML='<span style="color:var(--green)">✅ Done</span>';
+      toast('Pipeline completed!','ok');
+      switchTab('results');
+    } else if(data.status==='failed'){
+      STAGES.forEach(s=>{ if(document.getElementById(`ps-${s}`).classList.contains('running')) setStage(s,'failed'); });
+      document.getElementById('pipe-msg').textContent='❌ Pipeline failed — check results.';
+      document.getElementById('last-run').innerHTML='<span style="color:var(--red)">❌ Failed</span>';
+      toast('Pipeline failed: '+(data.error||'unknown'));
     }
+  }catch(err){
+    timers.forEach(clearTimeout);
+    STAGES.forEach(s=>{ if(document.getElementById(`ps-${s}`).classList.contains('running')) setStage(s,'failed'); });
+    setPipeBadge('failed');
+    document.getElementById('pipe-msg').textContent='❌ Request failed.';
+    document.getElementById('last-run').innerHTML='<span style="color:var(--red)">❌ Error</span>';
+    toast('API error: '+err.message); console.error(err);
+  }finally{
+    setBtnLoading(false);
+  }
+}
 
-    // ── Toast notifications ─────────────────────────────────────────────────────
-    function toast(msg, type = 'error') {
-      const el = document.createElement('div');
-      el.className = 'toast' + (type === 'info' ? ' info' : '');
-      el.textContent = msg;
-      document.getElementById('toast-container').appendChild(el);
-      setTimeout(() => el.remove(), 4200);
-    }
+/* approve / reject */
+async function approveRun(){
+  if(!_pending){toast('Nothing to approve.');return;}
+  const banner=document.getElementById('approval-banner');
+  banner.querySelectorAll('button').forEach(b=>b.disabled=true);
+  setStage('council','running'); setPipeBadge('running');
+  document.getElementById('pipe-msg').textContent='Running Council Agent…';
+  try{
+    const res=await fetch(`${API}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_pending)});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${res.status}`);}
+    const data=await res.json();
+    _pending=null; banner.classList.remove('vis');
+    markDone(data.stages_completed||[]); setPipeBadge(data.status);
+    document.getElementById('pipe-msg').textContent='✅ All 4 stages complete!';
+    document.getElementById('last-run').innerHTML='<span style="color:var(--green)">✅ Done (approved)</span>';
+    buildResultCards(data); toast('Council complete!','ok'); switchTab('results');
+  }catch(err){
+    setStage('council','failed'); toast('Approval failed: '+err.message);
+    banner.querySelectorAll('button').forEach(b=>b.disabled=false);
+  }
+}
 
-    // ── API health check ────────────────────────────────────────────────────────
-    async function checkHealth() {
-      const dot = document.getElementById('api-dot');
-      const label = document.getElementById('api-label');
-      try {
-        const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-          dot.classList.remove('offline');
-          label.textContent = 'API online';
-        } else throw new Error();
-      } catch {
-        dot.classList.add('offline');
-        label.textContent = 'API offline';
-      }
-    }
-    checkHealth();
-    setInterval(checkHealth, 10000);
+function rejectRun(){
+  _pending=null;
+  document.getElementById('approval-banner').classList.remove('vis');
+  setStage('council','failed'); setPipeBadge('failed');
+  document.getElementById('pipe-msg').textContent='❌ Rejected.';
+  document.getElementById('last-run').innerHTML='<span style="color:var(--red)">❌ Rejected</span>';
+  toast('Pipeline rejected.','warn');
+}
 
-    // ── Pipeline stage helpers ──────────────────────────────────────────────────
-    const STAGES = ['email', 'memory', 'logistics', 'council'];
-    const STAGE_LABELS = {
-      email: { icon: '📧', name: 'Email Agent', desc: 'Extracting structured data...' },
-      memory: { icon: '🧠', name: 'Memory Agent', desc: 'Retrieving context...' },
-      logistics: { icon: '🗓️', name: 'Logistics Agent', desc: 'Analyzing conflicts...' },
-      council: { icon: '⚖️', name: 'Council Agent', desc: 'Deliberating...' },
-    };
-    const STAGE_KEYS = {
-      email: 'email_analysis complete',
-      memory: 'memory_context complete',
-      logistics: 'logistics_analysis complete',
-      council: 'council_recommendation complete',
-    };
+function clearRun(){
+  _pending=null; STAGES.forEach(s=>setStage(s,'pending'));
+  setPipeBadge('idle');
+  document.getElementById('pipe-msg').textContent='Submit an email to start the pipeline.';
+  document.getElementById('approval-banner').classList.remove('vis');
+  document.getElementById('last-run').textContent='No run yet.';
+  document.getElementById('last-run').style.color='var(--tx3)';
+  document.getElementById('badge-results').classList.remove('vis');
+  document.getElementById('res-list').innerHTML='<div class="empty">Run the pipeline first to see results here.</div>';
+  document.getElementById('res-badge').className='badge b-grey';
+  document.getElementById('res-badge').textContent='—';
+}
 
-    function resetPipeline() {
-      STAGES.forEach(s => {
-        setStage(s, 'pending');
-        document.getElementById(`sidebar-status-${s}`).textContent = 'Pending';
-      });
-      document.getElementById('pipeline-badge').className = 'panel-badge badge-grey';
-      document.getElementById('pipeline-badge').textContent = 'Idle';
-      document.getElementById('pipeline-sub-msg').textContent = 'Processing...';
-    }
+/* audit */
+async function loadAudit(){
+  const tbody=document.getElementById('audit-tbody');
+  tbody.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
+  try{
+    const r=await fetch(`${API}/audit-logs`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json(); const logs=d.logs||[];
+    if(!logs.length){tbody.innerHTML='<tr><td colspan="4" class="empty">No audit logs.</td></tr>';return;}
+    tbody.innerHTML=logs.map(l=>{
+      const t=l.timestamp?new Date(l.timestamp).toLocaleTimeString():'—';
+      const pc=l.status==='success'?'pill-ok':l.status==='running'?'pill-run':'pill-err';
+      const out=l.output_summary||'—';
+      return`<tr><td style="white-space:nowrap">${esc(t)}</td><td><code style="font-size:11px;color:var(--blue)">${esc(l.agent_name||'—')}</code></td><td><span class="pill ${pc}">${esc(l.status||'—')}</span></td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(out)}">${esc(out)}</td></tr>`;
+    }).join('');
+  }catch(e){tbody.innerHTML=`<tr><td colspan="4" class="empty" style="color:var(--red)">Error: ${esc(e.message)}</td></tr>`;}
+}
 
-    function setStage(stage, state) {
-      // progress bar
-      const ps = document.getElementById(`ps-${stage}`);
-      const psd = document.getElementById(`psd-${stage}`);
-      ps.className = `progress-stage ${state}`;
-      const icons = { pending: STAGES.indexOf(stage) + 1, running: '◌', complete: '✓', failed: '✗' };
-      psd.textContent = state === 'complete' ? '✓' : state === 'failed' ? '✗' : STAGES.indexOf(stage) + 1;
-
-      // sidebar
-      const si = document.getElementById(`sidebar-stage-${stage}`);
-      si.className = `stage-item ${state}`;
-      const statusMap = { pending: 'Pending', running: STAGE_LABELS[stage].desc, complete: 'Complete ✓', failed: 'Failed ✗' };
-      document.getElementById(`sidebar-status-${stage}`).textContent = statusMap[state];
-      si.querySelector('.stage-icon').textContent = state === 'complete' ? '✓' : state === 'failed' ? '✗' : '✦';
-    }
-
-    function markCompletedStages(stages_completed) {
-      STAGES.forEach(s => {
-        if (stages_completed.includes(STAGE_KEYS[s])) {
-          setStage(s, 'complete');
-        }
-      });
-    }
-
-    // ── JSON syntax highlighter ─────────────────────────────────────────────────
-    function renderJson(data, indent = 0) {
-      const pad = ' '.repeat(indent * 2);
-      const padI = ' '.repeat((indent + 1) * 2);
-
-      if (data === null) return `<span class="jt-null">null</span>`;
-      if (typeof data === 'boolean') return `<span class="jt-bool">${data}</span>`;
-      if (typeof data === 'number') return `<span class="jt-num">${data}</span>`;
-      if (typeof data === 'string') return `<span class="jt-str">"${escHtml(data)}"</span>`;
-
-      if (Array.isArray(data)) {
-        if (data.length === 0) return `<span class="jt-brace">[]</span>`;
-        const items = data.map(v => `${padI}${renderJson(v, indent + 1)}`).join(',\n');
-        return `<span class="jt-brace">[</span>\n${items}\n${pad}<span class="jt-brace">]</span>`;
-      }
-
-      if (typeof data === 'object') {
-        const keys = Object.keys(data);
-        if (keys.length === 0) return `<span class="jt-brace">{}</span>`;
-        const items = keys.map(k => {
-          return `${padI}<span class="jt-key">"${escHtml(k)}"</span><span class="jt-brace">: </span>${renderJson(data[k], indent + 1)}`;
-        }).join(',\n');
-        return `<span class="jt-brace">{</span>\n${items}\n${pad}<span class="jt-brace">}</span>`;
-      }
-      return escHtml(String(data));
-    }
-
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    // ── Result cards ────────────────────────────────────────────────────────────
-    const CARD_CONFIG = [
-      { key: 'email_analysis', icon: '📧', name: 'Email Agent', stage: 'email' },
-      { key: 'memory_context', icon: '🧠', name: 'Memory Agent', stage: 'memory' },
-      { key: 'logistics_analysis', icon: '🗓️', name: 'Logistics Agent', stage: 'logistics' },
-      { key: 'council_recommendation', icon: '⚖️', name: 'Council Agent', stage: 'council' },
-    ];
-
-    function buildResultCards(state) {
-      const container = document.getElementById('result-cards');
-      container.innerHTML = '';
-
-      CARD_CONFIG.forEach((cfg, idx) => {
-        const data = state[cfg.key];
-        const hasData = data && Object.keys(data).length > 0;
-        const completed = (state.stages_completed || []).includes(STAGE_KEYS[cfg.stage]);
-        const badgeClass = completed ? 'badge-green' : (state.status === 'awaiting_approval' && cfg.stage === 'council') ? 'badge-yellow' : 'badge-grey';
-        const badgeText = completed ? 'Complete' : (state.status === 'awaiting_approval' && cfg.stage === 'council') ? 'Awaiting' : 'Pending';
-
-        const card = document.createElement('div');
-        card.className = 'result-card' + (idx === 0 ? ' open' : '');
-        card.innerHTML = `
-      <div class="result-card-header" onclick="toggleCard(this.parentElement)">
-        <span class="result-card-icon">${cfg.icon}</span>
-        <span class="result-card-name">${cfg.name}</span>
-        <span class="panel-badge ${badgeClass}">${badgeText}</span>
-        <span class="result-card-chevron">▼</span>
-      </div>
-      <div class="result-card-body">
-        <div class="json-tree">${hasData ? renderJson(data) : '<span style="color:var(--text-3)">No data yet.</span>'}</div>
-      </div>`;
-        container.appendChild(card);
-      });
-
-      // Show results panel
-      document.getElementById('results-panel').classList.add('visible');
-    }
-
-    function toggleCard(card) {
-      card.classList.toggle('open');
-    }
-
-    // ── Status badge helpers ─────────────────────────────────────────────────────
-    function setPipelineBadge(status) {
-      const badge = document.getElementById('pipeline-badge');
-      const classMap = {
-        running: 'badge-blue',
-        awaiting_approval: 'badge-yellow',
-        completed: 'badge-green',
-        failed: 'badge-red',
-      };
-      const labelMap = {
-        running: 'Running',
-        awaiting_approval: 'Awaiting Approval',
-        completed: 'Completed',
-        failed: 'Failed',
-      };
-      badge.className = `panel-badge ${classMap[status] || 'badge-grey'}`;
-      badge.textContent = labelMap[status] || status;
-    }
-
-    // ── Set process button loading state ────────────────────────────────────────
-    function setProcessing(loading) {
-      const btn = document.getElementById('process-btn');
-      const icon = document.getElementById('process-btn-icon');
-      const lbl = document.getElementById('process-btn-label');
-      btn.disabled = loading;
-      if (loading) {
-        icon.innerHTML = '<div class="spinner"></div>';
-        lbl.textContent = 'Processing…';
-      } else {
-        icon.textContent = '▶';
-        lbl.textContent = 'Process Email';
-      }
-    }
-
-    // ── Main: Process Email ──────────────────────────────────────────────────────
-    async function processEmail() {
-      const email = document.getElementById('email-input').value.trim();
-      if (!email) { toast('Email body cannot be empty.'); return; }
-
-      const requireApproval = document.getElementById('approval-toggle').checked;
-
-      // Reset UI
-      _pendingState = null;
-      document.getElementById('approval-banner').classList.remove('visible');
-      document.getElementById('results-panel').classList.remove('visible');
-      resetPipeline();
-      setProcessing(true);
-      setPipelineBadge('running');
-      document.getElementById('last-run-status').textContent = '⏳ Running…';
-      document.getElementById('pipeline-sub-msg').textContent = 'Processing… this may take 15–30 seconds.';
-
-      // Animate stages sequentially while waiting (optimistic)
-      const stageTimers = [];
-      STAGES.forEach((s, i) => {
-        stageTimers.push(setTimeout(() => {
-          // only set to running if not already completed
-          const ps = document.getElementById(`ps-${s}`);
-          if (ps.classList.contains('pending')) setStage(s, 'running');
-        }, i * 1800));
-      });
-
-      try {
-        const res = await fetch(`${API}/process-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, require_approval: requireApproval }),
-        });
-
-        stageTimers.forEach(clearTimeout);
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        // Reflect actual completed stages
-        markCompletedStages(data.stages_completed || []);
-        setPipelineBadge(data.status);
-
-        const statusResultBadge = document.getElementById('results-status-badge');
-
-        if (data.status === 'awaiting_approval') {
-          _pendingState = data;
-          document.getElementById('approval-banner').classList.add('visible');
-          document.getElementById('pipeline-sub-msg').textContent = '⏸️ Paused — awaiting human approval before Council deliberation.';
-          document.getElementById('last-run-status').innerHTML = '<span style="color:var(--yellow)">⏸ Awaiting Approval</span>';
-          statusResultBadge.className = 'panel-badge badge-yellow';
-          statusResultBadge.textContent = 'Awaiting Approval';
-          toast('Pipeline paused — approve or reject to continue.', 'info');
-        } else if (data.status === 'completed') {
-          setStage('council', 'complete');
-          document.getElementById('pipeline-sub-msg').textContent = '✅ All 4 stages completed successfully.';
-          document.getElementById('last-run-status').innerHTML = '<span style="color:var(--green)">✅ Completed</span>';
-          statusResultBadge.className = 'panel-badge badge-green';
-          statusResultBadge.textContent = 'Completed';
-        } else if (data.status === 'failed') {
-          document.getElementById('pipeline-sub-msg').textContent = '❌ Pipeline failed. Check results for error details.';
-          document.getElementById('last-run-status').innerHTML = '<span style="color:var(--danger)">❌ Failed</span>';
-          statusResultBadge.className = 'panel-badge badge-red';
-          statusResultBadge.textContent = 'Failed';
-          toast('Pipeline failed: ' + (data.error || 'unknown error'));
-        }
-
-        buildResultCards(data);
-
-      } catch (err) {
-        stageTimers.forEach(clearTimeout);
-        STAGES.forEach(s => { if (document.getElementById(`ps-${s}`).classList.contains('running')) setStage(s, 'failed'); });
-        setPipelineBadge('failed');
-        document.getElementById('pipeline-sub-msg').textContent = '❌ Request failed.';
-        document.getElementById('last-run-status').innerHTML = '<span style="color:var(--danger)">❌ Error</span>';
-        toast('API error: ' + err.message);
-        console.error(err);
-      } finally {
-        setProcessing(false);
-      }
-    }
-
-    // ── Approve flow ─────────────────────────────────────────────────────────────
-    async function approveRun() {
-      if (!_pendingState) { toast('No pending state to approve.'); return; }
-
-      const banner = document.getElementById('approval-banner');
-      banner.querySelector('.btn-success').disabled = true;
-      banner.querySelector('.btn-danger').disabled = true;
-
-      setStage('council', 'running');
-      setPipelineBadge('running');
-      document.getElementById('pipeline-sub-msg').textContent = 'Running Council Agent…';
-
-      try {
-        const res = await fetch(`${API}/approve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(_pendingState),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        _pendingState = null;
-        banner.classList.remove('visible');
-
-        markCompletedStages(data.stages_completed || []);
-        setPipelineBadge(data.status);
-        document.getElementById('pipeline-sub-msg').textContent = '✅ All 4 stages completed after approval.';
-        document.getElementById('last-run-status').innerHTML = '<span style="color:var(--green)">✅ Completed (approved)</span>';
-
-        const statusResultBadge = document.getElementById('results-status-badge');
-        statusResultBadge.className = 'panel-badge badge-green';
-        statusResultBadge.textContent = 'Completed';
-
-        buildResultCards(data);
-        toast('Council deliberation complete!', 'info');
-      } catch (err) {
-        setStage('council', 'failed');
-        toast('Approval failed: ' + err.message);
-        banner.querySelector('.btn-success').disabled = false;
-        banner.querySelector('.btn-danger').disabled = false;
-      }
-    }
-
-    function rejectRun() {
-      _pendingState = null;
-      document.getElementById('approval-banner').classList.remove('visible');
-      setStage('council', 'failed');
-      document.getElementById('sidebar-status-council').textContent = 'Rejected';
-      document.getElementById('last-run-status').innerHTML = '<span style="color:var(--danger)">❌ Rejected</span>';
-      toast('Pipeline rejected. Council stage will not run.', 'info');
-    }
-
-    // ── Audit Logs ───────────────────────────────────────────────────────────────
-    async function loadAuditLogs() {
-      const tbody = document.getElementById('audit-tbody');
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="spinner" style="margin:0 auto;"></div></td></tr>';
-      try {
-        const res = await fetch(`${API}/audit-logs`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const logs = data.logs || [];
-
-        if (!logs.length) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No audit logs found.</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = logs.map(log => {
-          const t = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '—';
-          const pillClass = log.status === 'success' ? 'pill-success'
-            : log.status === 'error' ? 'pill-error'
-              : 'pill-running';
-          return `<tr>
-        <td style="white-space:nowrap;">${escHtml(t)}</td>
-        <td><code style="font-size:11px;color:var(--accent);">${escHtml(log.agent_name || '—')}</code></td>
-        <td><span class="status-pill ${pillClass}">${escHtml(log.status || '—')}</span></td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(log.input_summary || '—')}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(log.output_summary || '—')}</td>
-      </tr>`;
-        }).join('');
-      } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color:var(--danger);">Error: ${escHtml(err.message)}</td></tr>`;
-        toast('Failed to load audit logs: ' + err.message);
-      }
-    }
-
-    // ── Memory ───────────────────────────────────────────────────────────────────
-    async function loadMemory() {
-      const grid = document.getElementById('memory-grid');
-      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="spinner" style="margin:0 auto;"></div></div>';
-      try {
-        const res = await fetch(`${API}/memory`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const entries = Object.entries(data);
-
-        if (!entries.length) {
-          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">No memory entries found.</div>';
-          return;
-        }
-
-        grid.innerHTML = entries.map(([k, v]) => `
-      <div class="memory-card">
-        <div class="memory-card-key">${escHtml(k)}</div>
-        <div class="memory-card-val">${escHtml(v)}</div>
-      </div>
-    `).join('');
-      } catch (err) {
-        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;color:var(--danger);">Error: ${escHtml(err.message)}</div>`;
-        toast('Failed to load memory: ' + err.message);
-      }
-    }
-  </script>
+/* memory */
+async function loadMemory(){
+  const grid=document.getElementById('mem-grid');
+  grid.innerHTML='<div class="empty" style="grid-column:1/-1">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/memory`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json(); const entries=Object.entries(d);
+    if(!entries.length){grid.innerHTML='<div class="empty" style="grid-column:1/-1">No memory stored.</div>';return;}
+    grid.innerHTML=entries.map(([k,v])=>`<div class="mem-card"><div class="mem-key">${esc(k)}</div><div class="mem-val">${esc(String(v))}</div></div>`).join('');
+  }catch(e){grid.innerHTML=`<div class="empty" style="grid-column:1/-1;color:var(--red)">Error: ${esc(e.message)}</div>`;}
+}
+</script>
 </body>
-
 </html>
