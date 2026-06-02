@@ -2,7 +2,7 @@
 
 > An AI-powered multi-agent care coordination assistant that helps caregivers manage medical appointments, logistics, and patient context for their loved ones.
 
-Built with **AgentScope** (pipeline orchestration) · **Groq / LLaMA 3.3-70B** (LLM inference) · **FastAPI** (REST API) · **SQLite** (persistent memory) · **Pydantic** (structured outputs)
+Built with **AgentScope** (pipeline orchestration) · **Groq / LLaMA 3.1-8B Instant** (LLM inference) · **FastAPI** (REST API) · **SQLite** (persistent memory) · **Pydantic** (structured outputs)
 
 ---
 
@@ -114,7 +114,7 @@ maverick-assignment/
 
 | Layer | Technology |
 |---|---|
-| **LLM Inference** | [Groq](https://groq.com) — `llama-3.3-70b-versatile` |
+| **LLM Inference** | [Groq](https://groq.com) — `llama-3.1-8b-instant` (500K tokens/day free tier) |
 | **Pipeline Orchestration** | [AgentScope](https://github.com/modelscope/agentscope) v0.1.5 — `SequentialPipeline` |
 | **Web Framework** | [FastAPI](https://fastapi.tiangolo.com) v0.111.0 |
 | **ASGI Server** | [Uvicorn](https://www.uvicorn.org) v0.30.1 |
@@ -211,25 +211,40 @@ Open in your browser: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Using the Frontend Dashboard
 
-The frontend is a **single static HTML file** — no build step or server required.
+The frontend is **served directly by the FastAPI backend** — open it via the backend URL, not as a local file.
 
 ```bash
-open frontend/index.html
+# 1. Make sure the server is running:
+uvicorn app.main:app --reload --port 8000
+
+# 2. Then open in your browser:
+open http://localhost:8000/app
 ```
 
-Or double-click `frontend/index.html` in Finder.
+> ⚠️ **Do NOT open `frontend/index.html` directly** (e.g. by double-clicking in Finder).  
+> Opening as a `file://` URL blocks all API calls due to browser security (CORS policy).  
+> Always use `http://localhost:8000/app`.
 
-### Dashboard Features
+### Dashboard Tabs
 
-| Panel | What it does |
+The interface uses a **sidebar-tabbed layout** — click a tab to switch sections. No scrolling required.
+
+| Tab | Icon | What it contains |
+|---|---|---|
+| **Process** | ⚙️ | Email textarea, Human Approval toggle, Process Email button, Pipeline progress bar |
+| **Results** | 📊 | Expandable result cards for each of the 4 agents (auto-opens after completion) |
+| **Audit Logs** | 📋 | Chronological table of every agent call — click Refresh to load |
+| **Memory** | 🧠 | Patient context key-value grid from SQLite — click Load to display |
+
+### Key UI Features
+
+| Feature | What it does |
 |---|---|
-| **Header status dot** | Auto-pings `/api/health` every 10 seconds — green = connected |
-| **Email Input** | Pre-filled with a sample Patrick email; paste any caregiving email |
-| **Pipeline Progress Bar** | Animates through all 4 stages in real time |
-| **HITL Approval Banner** | Appears when `require_approval` is checked; lets you inspect & approve |
-| **Result Cards** | Collapsible JSON output for each of the 4 agents |
-| **Audit Log Table** | Live chronological log of every agent call from SQLite |
-| **Memory Panel** | Shows current patient context stored in SQLite |
+| **Header status dot** | Pulses green when API is online; turns red if server is unreachable |
+| **Sidebar stage list** | Shows all 4 pipeline stages with live Pending / Running / Complete / Failed status |
+| **Pipeline progress bar** | 4-step bar with animated blue pulse when running, green ✓ when complete |
+| **HITL Approval Banner** | Appears on Process tab when `Require Human Approval` is checked — shows Approve and Reject buttons |
+| **Auto tab switch** | Automatically switches to the Results tab when the pipeline completes |
 
 ---
 
@@ -471,10 +486,11 @@ uvicorn app.main:app --reload --port 8000
 - Ensure `.env` file exists in the project root with `GROQ_API_KEY=gsk_...`
 - Get a free key at [console.groq.com/keys](https://console.groq.com/keys)
 
-### Frontend shows "● Disconnected"
-- Make sure the backend server is running on port 8000
+### Frontend shows "● API offline"
+- Make sure the backend server is running: `uvicorn app.main:app --reload --port 8000`
 - Check the terminal running uvicorn for errors
-- The frontend polls `/api/health` every 10 seconds automatically
+- The frontend auto-pings `/api/health` every 12 seconds and updates the dot automatically
+- Ensure you opened `http://localhost:8000/app` — **not** `frontend/index.html` as a file
 
 ### AgentScope `FutureWarning` about google-generativeai
 This is suppressed automatically in `workflow.py`. If you see it, it's cosmetic only and does not affect functionality.
@@ -520,8 +536,8 @@ echo "GROQ_API_KEY=gsk_your_key_here" > .env
 # 5. Start the backend
 uvicorn app.main:app --reload --port 8000
 
-# 6. Open the frontend dashboard (new terminal tab)
-open frontend/index.html
+# 6. Open the frontend dashboard in your browser
+open http://localhost:8000/app
 
 # 7. Verify everything works
 curl http://localhost:8000/api/health
