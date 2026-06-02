@@ -21,7 +21,7 @@ from app.audit.audit_log import AuditLog
 load_dotenv()
 
 _client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
-_MODEL = "llama-3.3-70b-versatile"
+_MODEL = "llama-3.1-8b-instant"
 _AGENT_NAME = "memory_agent"
 
 # ---------------------------------------------------------------------------
