@@ -13,7 +13,7 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.memory.memory_store import MemoryStore
 from app.audit.audit_log import AuditLog
@@ -44,6 +44,14 @@ class MemoryContext(BaseModel):
     family_members: list[str]        # names of known family members
     wednesday_availability: str      # Patrick's Wednesday schedule
     relevant_notes: str              # any other notes relevant to the email event
+
+    @field_validator("family_members", mode="before")
+    @classmethod
+    def coerce_family_members_to_list(cls, v):
+        """Accept a comma-separated string OR a proper list from the LLM."""
+        if isinstance(v, str):
+            return [name.strip() for name in v.split(",") if name.strip()]
+        return v
 
 
 # ---------------------------------------------------------------------------

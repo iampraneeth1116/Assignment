@@ -272,58 +272,71 @@ class MaverickWorkflow:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _run_stage(self, stage_fn, state: dict) -> dict:
+        """
+        Run a single pipeline stage function safely.
+        Returns the updated state dict; on failure sets status/error and
+        re-raises so the caller knows which stage broke.
+        """
+        msg_in = Msg(
+            name="orchestrator",
+            content=state.get("raw_email", "")[:120] + "...",
+            role="user",
+            metadata=state,
+        )
+        msg_out = stage_fn(msg_in)
+        return dict(msg_out.metadata)
+
     def _run_pre_pipeline(self, state: dict) -> dict:
-        """Run email → memory → logistics stages only."""
-        try:
-            init_msg = Msg(
-                name="orchestrator",
-                content=state["raw_email"][:120] + "...",
-                role="user",
-                metadata=state,
-            )
-            result_msg = self._pre_pipeline(init_msg)
-            return dict(result_msg.metadata)
-        except Exception as exc:  # noqa: BLE001
-            state["status"] = "failed"
-            state["error"] = str(exc)
-            self._audit.log(
-                agent_name=_ORCHESTRATOR_NAME,
-                input_summary="Pre-pipeline stage failed",
-                output_summary=f"ERROR: {exc}",
-                status="error",
-            )
-            return state
+        """Run email → memory → logistics stages one at a time.
+
+        Running stages individually (rather than through SequentialPipeline)
+        ensures that any partially-completed work is preserved in the returned
+        state even if a later stage raises an exception.
+        """
+        for stage_fn in [_stage_email, _stage_memory, _stage_logistics]:
+            try:
+                state = self._run_stage(stage_fn, state)
+            except Exception as exc:  # noqa: BLE001
+                state["status"] = "failed"
+                state["error"] = str(exc)
+                self._audit.log(
+                    agent_name=_ORCHESTRATOR_NAME,
+                    input_summary=f"Stage {stage_fn.__name__} failed",
+                    output_summary=f"ERROR: {exc}",
+                    status="error",
+                )
+                return state
+        return state
 
     def _run_full_pipeline(self, state: dict) -> dict:
-        """Run all four stages (email → memory → logistics → council)."""
-        try:
-            init_msg = Msg(
-                name="orchestrator",
-                content=state["raw_email"][:120] + "...",
-                role="user",
-                metadata=state,
-            )
-            result_msg = self._full_pipeline(init_msg)
-            state = dict(result_msg.metadata)
-            state["status"] = "completed"
+        """Run all four stages (email → memory → logistics → council) one at a time.
 
-            self._audit.log(
-                agent_name=_ORCHESTRATOR_NAME,
-                input_summary="Full pipeline completed",
-                output_summary=f"stages={state['stages_completed']}",
-                status="success",
-            )
+        Running stages individually preserves any partial output in the returned
+        state even when one stage fails, instead of returning the blank initial
+        state that the SequentialPipeline wrapper would have produced.
+        """
+        for stage_fn in [_stage_email, _stage_memory, _stage_logistics, _stage_council]:
+            try:
+                state = self._run_stage(stage_fn, state)
+            except Exception as exc:  # noqa: BLE001
+                state["status"] = "failed"
+                state["error"] = str(exc)
+                self._audit.log(
+                    agent_name=_ORCHESTRATOR_NAME,
+                    input_summary=f"Stage {stage_fn.__name__} failed",
+                    output_summary=f"ERROR: {exc}",
+                    status="error",
+                )
+                return state
 
-        except Exception as exc:  # noqa: BLE001
-            state["status"] = "failed"
-            state["error"] = str(exc)
-            self._audit.log(
-                agent_name=_ORCHESTRATOR_NAME,
-                input_summary="Full pipeline failed",
-                output_summary=f"ERROR: {exc}",
-                status="error",
-            )
-
+        state["status"] = "completed"
+        self._audit.log(
+            agent_name=_ORCHESTRATOR_NAME,
+            input_summary="Full pipeline completed",
+            output_summary=f"stages={state['stages_completed']}",
+            status="success",
+        )
         return state
 
 

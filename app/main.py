@@ -15,10 +15,13 @@ Interactive API docs:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import agentscope
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.api.routes import router
 
@@ -100,7 +103,21 @@ async def root() -> dict[str, str]:
         "service": "Maverick AI - Caregiver OS",
         "docs": "/docs",
         "health": "/api/health",
+        "frontend": "/app",
     }
+
+
+# Serve the frontend HTML at /app
+_FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
+@app.get("/app", include_in_schema=False)
+async def serve_frontend():
+    """Serve the frontend UI."""
+    return FileResponse(_FRONTEND_DIR / "index.html")
+
+
+# Serve any other static assets (css, js, images) under /app/*
+app.mount("/app", StaticFiles(directory=str(_FRONTEND_DIR)), name="frontend")
 
 
 # ---------------------------------------------------------------------------
