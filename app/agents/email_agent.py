@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Optional
 
 from groq import Groq
 from dotenv import load_dotenv
@@ -38,26 +39,26 @@ _SYSTEM_PROMPT = (
 # Pydantic output model
 # ---------------------------------------------------------------------------
 class EmailAnalysis(BaseModel):
-    event_type: str                  # e.g. "appointment_reschedule"
-    person: str                      # patient / person the email is about
-    doctor: str                      # doctor's name
-    old_time: str                    # original appointment time
-    new_time: str                    # proposed new appointment time
-    transportation_required: bool    # does transport need rebooking?
-    urgency: str                     # "low" | "medium" | "high"
-    summary: str                     # one-sentence plain-English summary
+    event_type: str                      # e.g. "appointment_request", "appointment_reschedule"
+    person: str                          # patient / person the email is about
+    doctor: Optional[str] = None         # doctor's name (null if not mentioned)
+    old_time: Optional[str] = None       # original appointment time (null for new requests)
+    new_time: Optional[str] = None       # proposed new appointment time (null if not specified)
+    transportation_required: bool        # does transport need rebooking?
+    urgency: str                         # "low" | "medium" | "high"
+    summary: str                         # one-sentence plain-English summary
 
 
 # ---------------------------------------------------------------------------
 # JSON schema shown to the LLM so it knows exactly what to return
 # ---------------------------------------------------------------------------
 _SCHEMA = {
-    "event_type": "str — type of event (e.g. appointment_reschedule, cancellation)",
+    "event_type": "str — type of event (e.g. appointment_request, appointment_reschedule, cancellation, general_query)",
     "person": "str — name of the patient / person the email concerns",
-    "doctor": "str — name of the doctor / specialist",
-    "old_time": "str — original appointment date/time",
-    "new_time": "str — new proposed appointment date/time",
-    "transportation_required": "bool — true if transport needs to be rearranged",
+    "doctor": "str or null — name of the doctor / specialist, null if not mentioned",
+    "old_time": "str or null — original appointment date/time, null if this is a new request (not a reschedule)",
+    "new_time": "str or null — new or requested appointment date/time, null if not specified",
+    "transportation_required": "bool — true if transport needs to be arranged or rearranged",
     "urgency": "str — one of: low | medium | high",
     "summary": "str — one-sentence plain-English summary of the email",
 }
